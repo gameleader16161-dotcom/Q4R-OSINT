@@ -40,11 +40,60 @@ def account_from_url(value):
     return None
 
 
+def email_summary_line(data):
+    """Summarize explicit public email fields, never infer account registration."""
+    email = data.get("target", {}).get("email", "")
+    if not email:
+        return ""
+
+    def email_key(value):
+        if not isinstance(value, str) or value.count("@") != 1:
+            return None
+        local, domain = value.strip().rsplit("@", 1)
+        if not local or not domain:
+            return None
+        # Do not collapse Gmail dots, plus aliases or local-part case.
+        return local, domain.casefold()
+
+    def cell(value):
+        return " ".join(public_text(value).split()).replace("|", "\\|")
+
+    evidence = {r.get("id"): r for r in data.get("requests", []) if isinstance(r, dict)}
+    linked = {}
+    for finding in data.get("findings", []):
+        source = finding.get("source", "")
+        attrs = finding.get("attributes", {})
+        if source not in PLATFORMS or not isinstance(attrs, dict):
+            continue
+        direct = finding.get("kind") == "public_profile" or source in ("github", "gitlab", "keybase")
+        record = evidence.get(finding.get("evidence_id"), {})
+        if (not direct or "candidate" in str(attrs.get("match_type", "")).lower()
+                or not attrs.get("username") or not safe_url(finding.get("url", ""))
+                or email_key(email) is None or email_key(attrs.get("email")) != email_key(email)
+                or not record or record.get("source") != source or record.get("error")
+                or record.get("status") != 200
+                or record.get("evidence_type", "http_response") != "http_response"):
+            continue
+        account = f'{cell(attrs["username"])} [public email: {cell(record["id"])}]'
+        if account not in linked.setdefault(source, []):
+            linked[source].append(account)
+    fields = ["Email: " + cell(email)]
+    for source, label in PLATFORMS.items():
+        fields.append(label + ": " + (", ".join(linked[source]) if source in linked else "غير مثبت / unverified"))
+    return " | ".join(fields)
+
+
 def account_lines(data):
     lines = ["Q4R — account summary / ملخص الحسابات", "",
              "Retrieved profiles and search candidates are NOT proof of a person's identity.",
              "X = no result returned by the checked source; ? = blocked, skipped or unconfirmed.",
              "X لا يثبت عدم وجود الحساب خارج المصدر الذي فُحص.", ""]
+    email_line = email_summary_line(data)
+    if email_line:
+        lines[:0] = [email_line, "",
+                     "Email row: only the same address explicitly published in a retrieved public profile is shown.",
+                     "غير مثبت = no public email link established; not proof of absence or account registration.",
+                     "Profiles below are separate username/name search leads, not implied email links.", ""]
     findings = data.get("findings", [])
     grouped, seen = {}, set()
     for finding in findings:

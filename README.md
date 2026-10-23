@@ -4,7 +4,7 @@
 
 Q4R is a Python command-line tool for Kali Linux and other systems with Python 3.10+. Enter a full name, a username and optionally an email. Q4R retrieves public leads, records response evidence and produces a searchable local report and relationship graph.
 
-Q4R **0.3.0** includes **18 built-in source connectors**, optional browser-based Google/Bing/DuckDuckGo result collection, optional Brave indexed web search and optional Wayback lookup. Twelve connectors perform direct public social/community profile checks. **A Brave key is not required for those checks or the browser option.** A separate registry of **48 domains** generates web-search queries; those are not 48 direct account detectors. Q4R is independent of Maltego and SpiderFoot and makes no claim to search the entire internet or outperform every other tool.
+Q4R **0.3.1** includes **18 built-in source connectors**, optional browser-based Google/Bing/DuckDuckGo result collection, optional Brave indexed web search and optional Wayback lookup. Twelve connectors perform direct public social/community profile checks. **A Brave key is not required for those checks or the browser option.** A separate registry of **48 domains** generates web-search queries; those are not 48 direct account detectors. Q4R is independent of Maltego and SpiderFoot and makes no claim to search the entire internet or outperform every other tool.
 
 ## Install on Kali
 
@@ -57,6 +57,16 @@ q4r results cases/review-001 --export-accounts
 ```
 
 ## Account text file and visible results
+
+Since 0.3.1, supplying an email adds a single first line to `accounts.txt` with every supported platform. For example (middle platforms omitted here):
+
+```text
+Email: me@example.org | Instagram: غير مثبت / unverified | Facebook: غير مثبت / unverified | ... | GitHub: example_handle [public email: E00001]
+```
+
+A username appears in that row **only when a retrieved public profile explicitly publishes the same email in a structured field**, with a successful saved source response and its evidence ID. This is a public contact-email observation, not proof of a login email, account registration or ownership. `غير مثبت / unverified` means no such public link was established, including sources that were not checked. Name/username matches and search snippets never establish email links. The regular account results remain separate below. Matching preserves email local-part case, dots and plus aliases; only the domain ignores case.
+
+Currently the GitHub connector reads an explicit public email field. Instagram and Facebook connectors do not return an email field, so they remain unverified in the email row even if their public profiles were retrieved. Q4R does not submit password-reset forms, trigger recovery messages or discover private email-to-account registrations. Email-only input does not enable hidden account discovery. Existing reports with a saved target email can receive the same format using `q4r results ... --export-accounts`.
 
 The end of each scan now shows up to 20 retrieved leads in the terminal. `--preview-limit` changes that limit. The **last output line** prints the absolute path to `accounts.txt`, a UTF-8 text summary alongside the full report:
 

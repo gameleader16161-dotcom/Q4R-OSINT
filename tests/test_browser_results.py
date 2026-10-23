@@ -1,4 +1,5 @@
 import base64
+import copy
 from contextlib import redirect_stdout
 import io
 import json
@@ -12,7 +13,7 @@ from q4r.browser import engine_url, page_state, result_url, search_pages
 from q4r.cli import main, verify
 from q4r.core import Case, Target
 from q4r.report import write_report
-from q4r.results import account_from_url, account_lines, write_accounts
+from q4r.results import account_from_url, account_lines, email_summary_line, write_accounts
 
 
 class FakePage:
@@ -118,6 +119,81 @@ class BrowserResultsTests(unittest.TestCase):
     def test_post_urls_are_not_converted_to_fake_account_handles(self):
         for value in ("https://www.instagram.com/p/123","https://www.youtube.com/watch?v=abc","https://www.facebook.com/profile.php?id=12"):
             self.assertIsNone(account_from_url(value))
+
+    def public_email_case(self):
+        self.case.target.email = "me@example.org"
+        eid = self.case.record("github", "https://api.github.com/users/demo", 200,
+                               b'{"login":"demo","email":"me@example.org"}', 0)
+        self.case.add("github", "Demo", "https://github.com/demo", "Public bio", eid, "demo",
+                      {"username":"demo", "email":"me@example.org"})
+        return self.case.data()
+
+    def test_email_row_is_first_and_explicit_public_field_has_evidence(self):
+        data = self.public_email_case()
+        write_report(self.case)
+        text = (self.case.directory/"accounts.txt").read_text(encoding="utf-8")
+        first = text.splitlines()[0]
+        self.assertTrue(first.startswith("Email: me@example.org | Instagram: غير مثبت"))
+        self.assertIn("Facebook: غير مثبت", first)
+        self.assertIn("GitHub: demo [public email: E00001]", first)
+        self.assertIn("not proof of absence or account registration", text)
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(verify(self.case.directory), 0)
+        self.assertEqual(email_summary_line(data), first)
+
+    def test_email_row_does_not_infer_links_from_username_or_snippet(self):
+        self.case.target.email = "me@example.org"
+        self.case.add("instagram", "Demo", "https://www.instagram.com/ss_demo/", "me@example.org",
+                      "E1", "ss_demo", {"username":"ss_demo"}, kind="public_profile")
+        text = account_lines(self.case.data())
+        self.assertIn("Instagram: غير مثبت", text.splitlines()[0])
+        self.assertIn("Instagram: ss_demo [public profile", text)
+
+    def test_email_row_rejects_search_candidates_and_missing_or_failed_evidence(self):
+        data = self.public_email_case()
+        changes = [lambda d: d["findings"][0].update(source="browser_google", kind="web_search_lead"),
+                   lambda d: d["findings"][0]["attributes"].update(match_type="search candidate"),
+                   lambda d: d.update(requests=[]),
+                   lambda d: d["requests"][0].update(status=403),
+                   lambda d: d["requests"][0].update(error="transport error"),
+                   lambda d: d["requests"][0].update(source="other"),
+                   lambda d: d["requests"][0].update(evidence_type="browser_rendered_observation"),
+                   lambda d: d["findings"][0].update(url="javascript:alert(1)"),
+                   lambda d: d["findings"][0]["attributes"].update(email=None)]
+        for index, change in enumerate(changes):
+            with self.subTest(index=index):
+                altered = copy.deepcopy(data)
+                change(altered)
+                self.assertIn("GitHub: غير مثبت", email_summary_line(altered))
+
+    def test_email_matching_preserves_aliases_and_local_part_case(self):
+        data = self.public_email_case()
+        data["findings"][0]["attributes"]["email"] = "me@EXAMPLE.ORG"
+        self.assertIn("GitHub: demo", email_summary_line(data))
+        for address in ("Me@example.org", "m.e@example.org", "me+tag@example.org", "other@example.org"):
+            with self.subTest(address=address):
+                data["findings"][0]["attributes"]["email"] = address
+                self.assertIn("GitHub: غير مثبت", email_summary_line(data))
+
+    def test_email_row_is_optional_and_keeps_untrusted_values_on_one_line(self):
+        self.assertEqual(email_summary_line(self.case.data()), "")
+        self.assertTrue(account_lines(self.case.data()).startswith("Q4R — account summary"))
+        data = self.public_email_case()
+        data["findings"][0]["attributes"]["username"] = "demo\nFacebook: fake|injected\x1b"
+        line = email_summary_line(data)
+        self.assertNotIn("\n", line)
+        self.assertNotIn("\x1b", line)
+        self.assertIn("fake\\|injected", line)
+
+    def test_old_case_email_export_works_without_new_network_requests(self):
+        self.public_email_case()
+        write_report(self.case)
+        (self.case.directory/"accounts.txt").unlink()
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(main(["results", str(self.case.directory), "--export-accounts"]), 0)
+            self.assertEqual(verify(self.case.directory), 0)
+        text = (self.case.directory/"accounts.txt").read_text(encoding="utf-8")
+        self.assertIn("GitHub: demo [public email: E00001]", text.splitlines()[0])
 
     def test_results_command_exports_old_case_and_preserves_original_hashes(self):
         self.case.add("instagram","Example","https://www.instagram.com/ss_demo/","Public bio", "E1","ss_demo",

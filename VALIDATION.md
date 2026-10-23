@@ -1,5 +1,9 @@
 # Q4R validation
 
+## 0.3.1 public email summary
+
+Six additional regression tests cover the optional first-line email summary, explicit public email fields and response evidence, separation from username/search-snippet results, missing/failed/mismatched evidence, candidate exclusion, exact email matching without alias collapsing, one-line text escaping and old-case export with manifest verification. These use synthetic local fixtures, not password-reset requests or a person's accounts. Existing connectors are unchanged: only the GitHub connector currently supplies an explicit public email attribute.
+
 ## 0.3.0 additions
 
 The 0.3.0 tests cover terminal result previews, old-case account export, exact final account-file path, absent versus blocked markers, search-candidate labeling, post-URL rejection, known search redirect decoding, search budgets, challenged-engine stopping, browser evidence typing and offline browser suppression. Account export preserves existing evidence hashes, including when a file has been tampered with.

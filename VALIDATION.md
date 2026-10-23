@@ -1,5 +1,9 @@
 # Q4R validation
 
+## 0.4.0 update prompt
+
+Updater regression tests cover Y/N and lowercase/empty/invalid responses, commit-pinned metadata parsing without execution, numeric version ordering and downgrade avoidance, bounded metadata reads/timeouts, noninteractive and offline suppression, disabling checks, saved-report commands, network errors, cancellation, installation failure, isolated installed-version verification and restart arguments. Installation-command tests distinguish system Python, source execution, installed virtualenvs and the ordinary pipx home. These tests mock network and installer processes; they do not claim a real remote upgrade. The packaging check separately installs and runs the complete package in an isolated environment.
+
 ## 0.3.1 public email summary
 
 Six additional regression tests cover the optional first-line email summary, explicit public email fields and response evidence, separation from username/search-snippet results, missing/failed/mismatched evidence, candidate exclusion, exact email matching without alias collapsing, one-line text escaping and old-case export with manifest verification. These use synthetic local fixtures, not password-reset requests or a person's accounts. Existing connectors are unchanged: only the GitHub connector currently supplies an explicit public email attribute.

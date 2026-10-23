@@ -4,7 +4,7 @@
 
 Q4R is a Python command-line tool for Kali Linux and other systems with Python 3.10+. Enter a full name, a username and optionally an email. Q4R retrieves public leads, records response evidence and produces a searchable local report and relationship graph.
 
-Q4R **0.3.1** includes **18 built-in source connectors**, optional browser-based Google/Bing/DuckDuckGo result collection, optional Brave indexed web search and optional Wayback lookup. Twelve connectors perform direct public social/community profile checks. **A Brave key is not required for those checks or the browser option.** A separate registry of **48 domains** generates web-search queries; those are not 48 direct account detectors. Q4R is independent of Maltego and SpiderFoot and makes no claim to search the entire internet or outperform every other tool.
+Q4R **0.4.0** includes **18 built-in source connectors**, optional browser-based Google/Bing/DuckDuckGo result collection, optional Brave indexed web search and optional Wayback lookup. Twelve connectors perform direct public social/community profile checks. **A Brave key is not required for those checks or the browser option.** A separate registry of **48 domains** generates web-search queries; those are not 48 direct account detectors. Q4R is independent of Maltego and SpiderFoot and makes no claim to search the entire internet or outperform every other tool.
 
 ## Install on Kali
 
@@ -29,6 +29,8 @@ python3 -m q4r scan --username YOUR_OWN_USERNAME --sources github
 
 ## Update an existing install
 
+Install 0.4.0 once using the commands below to enable future update prompts:
+
 ```bash
 cd Q4R-OSINT
 git pull --ff-only
@@ -39,6 +41,29 @@ q4r --version
 Version 0.3.0 shows retrieved titles, usernames, URLs and snippets in the terminal, writes an `accounts.txt` summary, reads old reports with `q4r results`, and adds optional visible-browser web searches. It retains the 0.1.2 packaging fix for checkouts containing `cases/` or extra folders. `git pull` alone updates the clone, not the copy installed by pipx; reinstall after pulling. `bash install.sh` can also be rerun to install the updated copy.
 
 If an earlier install failed with `Multiple top-level packages discovered in a flat-layout: ['q4r', 'cases']`, update using the commands above. The build explicitly includes only the `q4r` package. You do not need to remove your reports or clone another copy. A failed installation leaves the previously installed command in place, which explains an old version still appearing after a successful `git pull`.
+
+## Update prompt (0.4.0+)
+
+On interactive `q4r` and online `q4r scan` launches, Q4R checks the official repository for a newer stable version. When one exists, it displays:
+
+```text
+A Q4R update is available: 0.4.0 -> 0.4.1
+Would you like to update? [Y/N] (default: N):
+```
+
+Type **Y** then Enter to install and automatically restart with the same arguments. Type **N** then Enter to continue with the installed version. Lowercase works; empty Enter also continues. Other letters prompt again. The version above is an example, not an announcement of 0.4.1.
+
+The check has a three-second timeout per metadata request and does not send names, usernames, emails or case contents. Network/rate-limit failures show a short notice and allow the scan to continue. There are no startup checks for `--offline`, piped/noninteractive runs, help, version, saved-report commands, `sources` or browser installation.
+
+```bash
+q4r update --check       # Display availability only
+q4r update              # Offer Y/N installation, then exit
+q4r --no-update-check   # Skip startup checking for this run
+q4r scan --username YOUR_USERNAME --no-update-check
+export Q4R_NO_UPDATE_CHECK=1  # Disable automatic checks in this shell
+```
+
+Automatic installation supports the ordinary `q4r-osint` pipx environment and installed virtualenvs. It downloads a commit-pinned archive from this official repository, uses `pipx install --force` in the running pipx home (preserving the existing environment), or the virtualenv's own pip, then verifies the installed version in isolated Python before restarting. It never runs sudo or modifies system Python. Source-checkout execution and customized/suffixed pipx environments receive instructions instead of an automatic install. The update installs the command; it does not git-pull your clone or edit case files. New update notifications require the published package version to increase; commits with the same version do not trigger them. See the [pipx CLI reference](https://pipx.pypa.io/stable/reference/cli.html) for its existing-environment `--force` behavior.
 
 ## Usage
 

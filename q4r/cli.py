@@ -15,6 +15,7 @@ from .social import SOCIAL_PROVIDERS
 from .report import write_report
 from .results import print_findings, write_accounts
 from .browser import ENGINES, collect_browser, install_browser
+from .update import automatic_update, check_update
 
 
 def bounded_int(low, high):
@@ -70,8 +71,10 @@ def show_queries(directory, limit):
 
 
 def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
     p = argparse.ArgumentParser(prog="q4r", description="Q4R — public-source research with auditable evidence")
     p.add_argument("--version", action="version", version="Q4R " + __version__)
+    p.add_argument("--no-update-check", action="store_true", help="Skip the interactive startup update check")
     p.add_argument("--browser", dest="interactive_browser", action="store_true", help="Enable visible browser search with interactive target prompts")
     sub = p.add_subparsers(dest="command")
     scan = sub.add_parser("scan", help="Collect public leads and export a report")
@@ -79,6 +82,7 @@ def main(argv=None):
         scan.add_argument("--" + flag, default="")
     scan.add_argument("--out", type=Path, help="New case directory (never overwrites existing cases)")
     scan.add_argument("--offline", action="store_true", help="Build search plan only; no network requests")
+    scan.add_argument("--no-update-check", action="store_true", default=argparse.SUPPRESS, help="Skip the interactive startup update check")
     scan.add_argument("--require-web", action="store_true", help="Fail before collection if automatic Brave web search is not configured")
     scan.add_argument("--sources", default=",".join(PROVIDERS) + ",brave", help="Comma-separated sources; q4r sources lists them")
     scan.add_argument("--workers", type=bounded_int(1, 8), default=4, help="Parallel sources (default 4); each host remains rate-limited")
@@ -108,7 +112,15 @@ def main(argv=None):
     installer = sub.add_parser("browser-install", help="Install the optional Playwright browser runtime")
     installer.add_argument("--browser-type", choices=("firefox","chromium"), default="firefox")
     installer.add_argument("--with-deps", action="store_true", help="Also run Playwright's system dependency installer")
+    updater = sub.add_parser("update", help="Check the official repository and offer an automatic update")
+    updater.add_argument("--check", action="store_true", help="Only display update availability; do not install")
     args = p.parse_args(argv)
+    if args.command == "update":
+        return check_update([], explicit=True, check_only=args.check)
+    if args.command in (None, "scan"):
+        update_status = automatic_update(argv, args.no_update_check, getattr(args, "offline", False))
+        if update_status is not None:
+            return update_status
     if args.command == "sources":
         print("Built-in source connectors: " + ", ".join(PROVIDERS) + ", brave (API key), wayback (opt-in)")
         print("Social profile checks without a Brave key: " + ", ".join(SOCIAL_PROVIDERS))

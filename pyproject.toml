@@ -4,13 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "q4r-osint"
-version = "0.2.0"
+version = "0.3.0"
 description = "Evidence-first public-source investigation CLI"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
 dependencies = []
+
+[project.optional-dependencies]
+browser = ["playwright>=1.55,<2"]
 
 [project.scripts]
 q4r = "q4r.cli:main"

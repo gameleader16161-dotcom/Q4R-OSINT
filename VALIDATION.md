@@ -1,4 +1,12 @@
-# Q4R 0.2.0 validation
+# Q4R validation
+
+## 0.3.0 additions
+
+The 0.3.0 tests cover terminal result previews, old-case account export, exact final account-file path, absent versus blocked markers, search-candidate labeling, post-URL rejection, known search redirect decoding, search budgets, challenged-engine stopping, browser evidence typing and offline browser suppression. Account export preserves existing evidence hashes, including when a file has been tampered with.
+
+Google, Bing and DuckDuckGo live result pages for the neutral query `Python Playwright documentation` were inspected in the in-app browser on 2026-10-23. Their visible result-link structures were confirmed. This used a different browser session/network from the user's Kali installation and is **not** an end-to-end claim that Playwright Firefox can access those engines from Kali. The separate real-Firefox CI smoke uses entirely intercepted offline fixtures to test the actual extraction driver without investigating a person or relying on live engine access.
+
+## 0.2.0 direct-source smoke
 
 Observed on 2026-10-23. Live smoke runs were made from the development machine with Q4R's actual bounded HTTP client, not a browser login session. They are observations of that network and time, not promises for every account, region or future page layout. CI tests use fixtures and do not call social sites.
 

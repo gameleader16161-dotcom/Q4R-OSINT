@@ -4,7 +4,7 @@
 
 Q4R is a Python command-line tool for Kali Linux and other systems with Python 3.10+. Enter a full name, a username and optionally an email. Q4R retrieves public leads, records response evidence and produces a searchable local report and relationship graph.
 
-Q4R **0.2.0** includes **18 built-in source connectors**, optional Brave indexed web search and optional Wayback lookup. Twelve of those connectors perform direct public social/community profile checks. **A Brave key is not required for those checks.** A separate registry of **48 domains** generates indexed web-search queries; those are not 48 direct account detectors. Q4R is independent of Maltego and SpiderFoot and makes no claim to search the entire internet or outperform every other tool.
+Q4R **0.3.0** includes **18 built-in source connectors**, optional browser-based Google/Bing/DuckDuckGo result collection, optional Brave indexed web search and optional Wayback lookup. Twelve connectors perform direct public social/community profile checks. **A Brave key is not required for those checks or the browser option.** A separate registry of **48 domains** generates web-search queries; those are not 48 direct account detectors. Q4R is independent of Maltego and SpiderFoot and makes no claim to search the entire internet or outperform every other tool.
 
 ## Install on Kali
 
@@ -36,7 +36,7 @@ pipx install --force .
 q4r --version
 ```
 
-Version 0.2.0 adds direct social profile retrieval, public account search on Bluesky and GitHub, parallel collection, per-profile checks and self-published link edges in GraphML. It retains the 0.1.2 packaging fix for checkouts containing `cases/` or extra folders. `git pull` alone updates the clone, not the copy installed by pipx; reinstall after pulling. `bash install.sh` can also be rerun to install the updated copy.
+Version 0.3.0 shows retrieved titles, usernames, URLs and snippets in the terminal, writes an `accounts.txt` summary, reads old reports with `q4r results`, and adds optional visible-browser web searches. It retains the 0.1.2 packaging fix for checkouts containing `cases/` or extra folders. `git pull` alone updates the clone, not the copy installed by pipx; reinstall after pulling. `bash install.sh` can also be rerun to install the updated copy.
 
 If an earlier install failed with `Multiple top-level packages discovered in a flat-layout: ['q4r', 'cases']`, update using the commands above. The build explicitly includes only the `q4r` package. You do not need to remove your reports or clone another copy. A failed installation leaves the previously installed command in place, which explains an old version still appearing after a successful `git pull`.
 
@@ -53,7 +53,66 @@ q4r scan --username YOUR_OWN_USERNAME --sources github,gitlab,keybase --wayback
 q4r scan --username YOUR_OWN_USERNAME --sources social --workers 4
 q4r scan --name "Example Researcher" --sources bluesky,github_search
 q4r verify cases/review-001
+q4r results cases/review-001 --export-accounts
 ```
+
+## Account text file and visible results
+
+The end of each scan now shows up to 20 retrieved leads in the terminal. `--preview-limit` changes that limit. The **last output line** prints the absolute path to `accounts.txt`, a UTF-8 text summary alongside the full report:
+
+```text
+Instagram: example_handle [public profile / بيانات ملف عامة]
+  https://www.instagram.com/example_handle/
+Facebook: X [no returned accounts / لم يُرجع حسابات]
+Reddit: ? [blocked / نتيجة غير حاسمة]
+Bluesky: another_handle.bsky.social [candidate / مرشح من البحث]
+```
+
+`X` means the checked source returned no accounts for that input. It does not prove global absence. `?` means blocked, unconfirmed or skipped; these do not become fake negative results. Profiles returned from a name search, or account URLs seen in web-search results, are explicitly labeled candidates. Account links are deduplicated, but never merged into an asserted personal identity. Google/Bing/DuckDuckGo entries describe search leads, not accounts on those engines.
+
+Read or export an **existing 0.1/0.2 case without searching again**:
+
+```bash
+q4r results cases/YOUR_OLD_CASE --limit 20 --export-accounts
+```
+
+The export creates `accounts.txt` and adds only its hash to an existing manifest. It preserves the original evidence hashes; it does not repair or conceal tampered evidence. Direct `report.json` paths are also accepted.
+
+## Optional visible browser search
+
+This adds actual rendered search-engine result collection, rather than just generating search links. It opens a fresh isolated browser profile and records visible result titles, destination links and snippets from Google, Bing and DuckDuckGo. It does not read your existing browsing history, copy saved browser sessions or recursively open all results.
+
+One-time setup after installing Q4R:
+
+```bash
+pipx inject q4r-osint playwright
+q4r browser-install
+```
+
+Alternatively install the optional extra when updating:
+
+```bash
+pipx install --force '/root/Q4R-OSINT[browser]'
+q4r browser-install
+```
+
+Firefox is the default. Playwright downloads its matching browser binary; your normal Firefox installation alone does not replace this step. If browser system libraries are missing, Playwright's explicit dependency installer is available with `q4r browser-install --with-deps`. Availability depends on your OS and GUI environment; Playwright lists its officially supported Linux distributions in its [installation documentation](https://playwright.dev/python/docs/intro). Kali is not a separately listed supported target, so missing runtime libraries must be resolved on that machine. Re-run browser-install after changing Playwright versions if it requests new binaries.
+
+Then run:
+
+```bash
+q4r --browser
+# Browser searches only:
+q4r scan --name "Example Researcher" --username example_handle --sources browser --browser-budget 12
+# Selected engines, with a pause for you to review each page:
+q4r scan --name "Example Researcher" --browser --search-engines google,bing --browser-manual
+```
+
+`--browser-budget` is 1–100 search pages total, default 6. Queries start with quoted supplied identifiers, then site-specific plan entries; selected engines are tried for each query within that budget. `--limit` caps extracted links per page. `--browser-headless` is optional for environments without a display and cannot be combined with `--browser-manual`. Chromium is optional through `--browser-type chromium` and its matching browser-install option; Q4R enables its sandbox and does not add sandbox bypass flags. Firefox is the practical default for the existing root-run Kali examples.
+
+No CAPTCHA solving, login/consent clicking, stealth flags, proxy rotation or security-warning bypass is implemented. If an engine presents a gate, it is marked blocked and further queries to it stop for that run. With `--browser-manual`, you may review the page yourself before pressing Enter in the terminal. Layout changes or unrecognized results are unconfirmed. Browser URLs in results are leads, not proof of profile ownership. The optional runtime being installed does not guarantee search-engine availability.
+
+Browser evidence is marked `browser_rendered_observation`: it is a JSON observation of the rendered page and extracted results, **not raw HTTP-response evidence**. It includes the query, page URL, visible text, result links, observation status and hash. The ordinary API connectors keep their original HTTP-response evidence type. Browser collection finishes before optional Wayback lookups.
 
 At least one identifier is required. A name, when supplied, must have at least two whitespace-separated parts; names with three or more parts and Unicode/Arabic are supported. There is no artificial name-length limit in Q4R's input. Sources impose their own query budgets; oversized queries are marked skipped instead of silently shortening the name. Provider-specific username syntax is checked separately. Email is optional and is searched as a quoted public web mention. Q4R does not perform login, password reset, SMTP account probing or breach-database lookups.
 
@@ -75,13 +134,13 @@ cat cases/YOUR_CASE_DIRECTORY/searches.txt
 
 The text file is new in 0.1.1; the `queries` command also reads old `report.json` files without needing that text file. Links are manual tasks, not results. You can open `report.html` with your browser using its printed file URI.
 
-To require configured automatic web search before any collection starts:
+To require a configured web-search mode before any collection starts:
 
 ```bash
 q4r scan --username YOUR_OWN_USERNAME --require-web
 ```
 
-This validates local configuration, not API-key validity, credits or service availability. A skipped source remains a skip; successful empty API responses are not errors. Exit code 0 can still mean limited coverage, so check the coverage section or use `--require-web` when web collection is essential.
+`--require-web` also accepts enabled `--browser` mode. This validates the selected mode, not key validity, credits, browser installation or service availability. A missing optional browser runtime becomes a reported error and preserves collected direct-source results. Exit code 0 can still mean limited coverage, so inspect source coverage.
 
 ## Automatic sources and honest coverage
 
@@ -154,6 +213,7 @@ Each run creates a new case directory; existing directories are never overwritte
 ```text
 report.html       Searchable local report, source status and SVG lead graph
 report.json       Structured results, direct checks, source coverage and search plan
+accounts.txt      Platform: username summary; X for no returned accounts, ? for inconclusive checks
 findings.csv      Spreadsheet-compatible lead export
 searches.txt      Complete manual search plan as text (since 0.1.1)
 graph.graphml     Generic graph interchange (all leads)
@@ -192,9 +252,15 @@ python3 -m q4r verify cases/smoke
 
 Unit/integration tests use mocked API responses, including negative/blocked cases and concurrent evidence writes. The separate packaging regression creates synthetic case files, an unrelated package and a nested clone, builds a wheel, checks that extra files are excluded, and installs/runs the CLI outside the checkout in a fresh environment. CI runs on Ubuntu with Python 3.10, 3.12 and 3.14. Live smoke tests use public service-owned profiles (and an official HN API example), not the investigation subject. Exit codes: `0` completed (may include skipped/unconfirmed/not-found checks), `2` invalid input, `3` partial run with error/blocked/partial coverage, `130` interrupted.
 
+The separate browser CI job installs the optional extra and a real Firefox runtime, intercepts all navigation with offline engine fixtures, and runs `python tests/check_browser.py`. It tests browser launch, rendered extraction, known redirect decoding, evidence hashes and account-summary export without sending subject queries to live search engines. Live Google/Bing/DuckDuckGo result layouts were inspected separately on 2026-10-23; that observation is not a promise of search access from every machine.
+
 ## بالعربي
 
 Q4R أداة سطر أوامر للبحث في المصادر العامة. بتثبتها مرة واحدة بالأوامر فوق، وبعدها بتكتب `q4r` من أي مكان. بتدخل الاسم من جزأين أو أكثر، اسم المستخدم، والبريد إذا متوفر. بتقدر تستخدم اسم عربي طويل؛ كل مصدر إله حدوده الخاصة للبحث.
+
+بالنسخة **0.3.0** بتظهر النتائج نفسها بالطرفية، وآخر سطر بيطبع مسار `accounts.txt`. الملف فيه اسم المنصة واليوزرنيم والرابط. `X` يعني المصدر ما رجّع حسابات، و`?` يعني حظر أو فحص غير محسوم أو متخطّى. نتائج بحث الاسم بتنكتب «مرشح» حتى ما ننسب حسابات ناس ثانيين للشخص. بتقدر تصدّر ملف لحالة قديمة بـ`q4r results مسار_الحالة --export-accounts`.
+
+للبحث بمتصفح فعلي بدون Brave: ثبّت الإضافة مرة بـ`pipx inject q4r-osint playwright` وبعدها `q4r browser-install`، وشغّل `q4r --browser`. بيفتح Firefox منفصل وبيجمع الروابط الظاهرة من Google وBing وDuckDuckGo ضمن ميزانية محدودة. إذا ظهر حظر أو تحقق، بيسجله وما بيتجاوزه. تثبيت المتصفح قد يحتاج مكتبات نظام إضافية حسب نسخة Kali.
 
 النسخة **0.2.0** بتفحص ملفات عامة مباشرة على Instagram وFacebook وYouTube وX وPinterest وTelegram وBluesky وMastodon وReddit وTikTok وDEV وHacker News، بدون مفتاح Brave. نجاح كل منصة يعتمد على توفر صفحتها العامة؛ إذا في حظر أو تسجيل دخول أو بيانات غير كافية، بتظهر الحالة بوضوح بدل اختراع نتيجة. بحث الاسم متوفر عبر Bluesky وGitHub، لكنه بيرجع مرشحين بحاجة مراجعة.
 

@@ -131,14 +131,15 @@ class Case:
         self.checks = []
 
     @locked
-    def record(self, source, url, status, body, elapsed, error=""):
+    def record(self, source, url, status, body, elapsed, error="", evidence_type="http_response"):
         evidence_id = "E" + str(len(self.requests) + 1).zfill(5)
         # Store response bodies only; credentials/authorization headers are never persisted.
         filename = "evidence/" + evidence_id + ".bin"
         (self.directory / filename).write_bytes(body)
         entry = dict(id=evidence_id, source=source, url=url, status=status,
                      observed_at=now(), sha256=hashlib.sha256(body).hexdigest(),
-                     file=filename, bytes=len(body), elapsed_ms=round(elapsed * 1000), error=error)
+                     file=filename, bytes=len(body), elapsed_ms=round(elapsed * 1000), error=error,
+                     evidence_type=evidence_type)
         self.requests.append(entry)
         with (self.directory / "requests.jsonl").open("a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")

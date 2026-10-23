@@ -13,6 +13,8 @@ from .http import Client, SourceError
 from .providers import PROVIDERS, brave, wayback
 from .social import SOCIAL_PROVIDERS
 from .report import write_report
+from .results import print_findings, write_accounts
+from .browser import ENGINES, collect_browser, install_browser
 
 
 def bounded_int(low, high):
@@ -70,6 +72,7 @@ def show_queries(directory, limit):
 def main(argv=None):
     p = argparse.ArgumentParser(prog="q4r", description="Q4R — public-source research with auditable evidence")
     p.add_argument("--version", action="version", version="Q4R " + __version__)
+    p.add_argument("--browser", dest="interactive_browser", action="store_true", help="Enable visible browser search with interactive target prompts")
     sub = p.add_subparsers(dest="command")
     scan = sub.add_parser("scan", help="Collect public leads and export a report")
     for flag in ("name", "username", "email"):
@@ -85,21 +88,50 @@ def main(argv=None):
     scan.add_argument("--wayback", action="store_true", help="Look up up to 10 retrieved URLs in Wayback")
     scan.add_argument("--sites", type=Path, help="Alternative local JSON registry for site-specific search queries")
     scan.add_argument("--ai-model", help="Opt-in installed local Ollama model; sends up to 40 evidence snippets to localhost")
+    scan.add_argument("--browser", action="store_true", help="Search visible web engine results in an isolated browser (optional extra)")
+    scan.add_argument("--search-engines", default="google,bing,duckduckgo", help="Comma-separated browser engines")
+    scan.add_argument("--browser-budget", type=bounded_int(1,100), default=6, help="Maximum browser search pages total (default 6)")
+    scan.add_argument("--browser-type", choices=("firefox","chromium"), default="firefox")
+    scan.add_argument("--browser-headless", action="store_true")
+    scan.add_argument("--browser-manual", action="store_true", help="Pause for you to review each visible search page before reading it")
+    scan.add_argument("--preview-limit", type=bounded_int(1,100), default=20, help="Maximum retrieved leads displayed in this terminal")
     sub.add_parser("sources", help="Show live connectors and search-plan site registry")
     check = sub.add_parser("verify", help="Check report/evidence files against manifest hashes")
     check.add_argument("directory", type=Path)
     queries = sub.add_parser("queries", help="Print manual search links from an existing case (including v0.1 cases)")
     queries.add_argument("directory", type=Path, help="Case directory or report.json path")
     queries.add_argument("--limit", type=bounded_int(1, 2000), default=20)
+    results = sub.add_parser("results", help="Show saved findings from an old/new report without searching again")
+    results.add_argument("directory", type=Path)
+    results.add_argument("--limit", type=bounded_int(1,100), default=20)
+    results.add_argument("--export-accounts", action="store_true", help="Create accounts.txt and add only its hash to an existing manifest")
+    installer = sub.add_parser("browser-install", help="Install the optional Playwright browser runtime")
+    installer.add_argument("--browser-type", choices=("firefox","chromium"), default="firefox")
+    installer.add_argument("--with-deps", action="store_true", help="Also run Playwright's system dependency installer")
     args = p.parse_args(argv)
     if args.command == "sources":
         print("Built-in source connectors: " + ", ".join(PROVIDERS) + ", brave (API key), wayback (opt-in)")
         print("Social profile checks without a Brave key: " + ", ".join(SOCIAL_PROVIDERS))
         print("Use --sources social for these only; some platforms may return blocked or unconfirmed.")
+        print("Optional browser engine collection: --browser or --sources browser (requires browser extra/runtime)")
         print("Search registry (queries only; not automatic profile detectors):")
         for site in load_sites():
             print("  " + site["domain"] + " [" + site["category"] + "]")
         return 0
+    if args.command == "browser-install":
+        return install_browser(args.browser_type,args.with_deps)
+    if args.command == "results":
+        try:
+            report = args.directory if args.directory.is_file() else args.directory / "report.json"
+            data = json.loads(report.read_text(encoding="utf-8"))
+            print_findings(data,args.limit)
+            if args.export_accounts:
+                path = write_accounts(data,report.parent,update_manifest=True)
+                print("Accounts text file: " + str(path))
+            return 0
+        except (OSError,ValueError,TypeError,AttributeError) as exc:
+            print("Cannot read saved results: " + str(exc),file=sys.stderr)
+            return 2
     if args.command == "verify":
         try:
             return verify(args.directory)
@@ -116,13 +148,15 @@ def main(argv=None):
         print(f"Q4R {__version__} — public-source research / بحث المصادر العامة")
         print("Enter an authorized subject. Leave optional fields blank. / الحقول اختيارية")
         try:
+            use_browser = args.interactive_browser
             args = p.parse_args(["scan", "--name", input("Full name / الاسم (2+ parts): "),
                                 "--username", input("Username / اسم المستخدم: "),
-                                "--email", input("Email / البريد (optional): ")])
+                                "--email", input("Email / البريد (optional): ")] + (["--browser"] if use_browser else []))
         except EOFError:
             p.print_help()
             return 2
     try:
+        args.browser = args.browser or args.interactive_browser
         target = Target(args.name, args.username, args.email)
         sites = load_sites(args.sites)
         selected = []
@@ -130,17 +164,27 @@ def main(argv=None):
             source = source.strip()
             selected.extend(SOCIAL_PROVIDERS if source == "social" else list(PROVIDERS) + ["brave"] if source == "all" else [source])
         selected = list(dict.fromkeys(selected))
+        if "browser" in selected:
+            args.browser = True
+            selected.remove("browser")
+        engines = list(dict.fromkeys(x.strip() for x in args.search_engines.split(",")))
+        if set(engines) - set(ENGINES):
+            raise ValueError("Unknown browser search engine; use google,bing,duckduckgo")
+        if args.browser_headless and args.browser_manual:
+            raise ValueError("--browser-manual needs a visible browser; omit --browser-headless")
         unknown = set(selected) - (set(PROVIDERS) | {"brave"})
         if unknown:
             raise ValueError("Unknown sources: " + ", ".join(sorted(unknown)))
         web_ready = bool(os.getenv("BRAVE_SEARCH_API_KEY", "").strip())
-        if args.require_web and (args.offline or "brave" not in selected or not web_ready):
+        if args.require_web and (args.offline or not (args.browser or ("brave" in selected and web_ready))):
             raise ValueError("--require-web needs the brave source, online mode and BRAVE_SEARCH_API_KEY. "
-                             "No collection was started; configure the API key and retry.")
+                             "Alternatively enable --browser. No collection was started.")
         if "brave" in selected and not args.offline and not web_ready:
             print("[Q4R] LIMITED COVERAGE: BRAVE_SEARCH_API_KEY is missing.\n"
                   "  Brave's general web index will NOT run. Selected direct social/profile connectors still run without it.\n"
                   "  Manual web search links will be saved; blocked/skipped sources are not evidence of absent accounts.", flush=True)
+        if args.browser and not args.offline:
+            print("[Q4R] Browser search enabled: " + ", ".join(engines) + "; no Brave key required.",flush=True)
         from datetime import datetime, timezone
         from uuid import uuid4
         directory = args.out or Path("cases") / (datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid4().hex[:6])
@@ -190,6 +234,14 @@ def main(argv=None):
                     future.cancel()
                 raise
         # Archive lookups depend on already-collected URLs and run only after source workers finish.
+        if args.browser:
+            before = len(case.findings)
+            if args.offline:
+                state, detail = "skipped", "offline mode: browser was not launched"
+            else:
+                state, detail = collect_browser(case,engines,args.browser_budget,args.limit,max(args.timeout,15),
+                                               args.browser_type,args.browser_headless,args.browser_manual)
+            completed(dict(source="browser",status=state,detail=detail,new_leads=len(case.findings)-before))
         if args.wayback:
             completed(run_source("wayback"))
         if args.ai_model and not args.offline:
@@ -205,6 +257,7 @@ def main(argv=None):
     finally:
         write_report(case)
     print(f"\n{len(case.findings)} leads; report: {case.directory.resolve() / 'report.html'}")
+    print_findings(case.data(),args.preview_limit)
     print("Report URI: " + (case.directory.resolve() / "report.html").as_uri())
     if not case.findings:
         print("No leads were retrieved from the sources that ran. This does not prove absence of public accounts.")
@@ -218,6 +271,7 @@ def main(argv=None):
             for entry in case.plan[:3]:
                 print("  " + entry["url"])
     print("Identity is unverified. Search links are planned tasks. Keep case files private.")
+    print("Accounts text file: " + str(case.directory.resolve() / "accounts.txt"))
     if interrupted:
         return 130
     return 3 if any(c["status"] in ("error", "blocked", "partial") for c in case.coverage) else 0

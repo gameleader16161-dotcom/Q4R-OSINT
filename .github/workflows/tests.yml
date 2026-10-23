@@ -18,3 +18,13 @@ jobs:
       - run: python tests/check_packaging.py
       - run: q4r --version
       - run: bash -n install.sh
+  browser-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install '.[browser]'
+      - run: python -m playwright install --with-deps firefox
+      - run: python tests/check_browser.py

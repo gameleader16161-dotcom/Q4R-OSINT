@@ -7,6 +7,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import asdict
 
 from .core import safe_url, locked
+from .results import write_accounts
 
 
 STYLE = """
@@ -34,6 +35,7 @@ def write_report(case):
     data = case.data()
     directory = case.directory
     (directory / "report.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_accounts(data, directory)
     (directory / "searches.txt").write_text(
         "MANUAL SEARCH LINKS — these are research tasks, not retrieved findings.\n\n" +
         "\n\n".join(p["query"] + "\n" + p["url"] for p in case.plan), encoding="utf-8")

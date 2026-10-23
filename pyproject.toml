@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "q4r-osint"
+version = "0.1.0"
+description = "Evidence-first public-source investigation CLI"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+dependencies = []
+
+[project.scripts]
+q4r = "q4r.cli:main"
+
+[tool.setuptools.package-data]
+q4r = ["sites.json"]

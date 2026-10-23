@@ -5,7 +5,7 @@ import os
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 from urllib.error import HTTPError
@@ -234,6 +234,66 @@ class Q4RTests(unittest.TestCase):
         from q4r.ai import summarize
         with self.assertRaises(ValueError):
             summarize(self.case, "demo-cloud")
+
+    def test_empty_run_without_web_key_is_actionable(self):
+        out = self.root / "empty"
+        output = io.StringIO()
+        with patch.dict(os.environ, {}, clear=True), patch.object(Client, "get", return_value=([], "E1")), redirect_stdout(output):
+            code = main(["scan", "--username", "ss_demo", "--sources", "github,gitlab,brave", "--out", str(out)])
+        text = output.getvalue()
+        self.assertEqual(code, 0)
+        self.assertLess(text.index("LIMITED COVERAGE"), text.index("[Q4R] github"))
+        self.assertIn("Automatic web/social search DID NOT RUN", text)
+        self.assertIn("0 new leads", text)
+        self.assertIn("q4r queries", text)
+        self.assertIn("https://www.google.com/search", text)
+        data = json.loads((out / "report.json").read_text(encoding="utf-8"))
+        self.assertEqual(data["target"]["username"], "ss_demo")
+        self.assertEqual(data["findings"], [])
+        self.assertIn("searches.txt", json.loads((out / "manifest.json").read_text()))
+        html = (out / "report.html").read_text(encoding="utf-8")
+        self.assertIn("Automatic web/social search did not run", html)
+        self.assertIn('<details open><summary>Search plan', html)
+
+    def test_require_web_fails_before_creating_case_or_sending_requests(self):
+        out = self.root / "require-key"
+        with patch.dict(os.environ, {}, clear=True), patch.object(Client, "get") as request, redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+            main(["scan", "--username", "example", "--require-web", "--out", str(out)])
+        self.assertEqual(error.exception.code, 2)
+        self.assertFalse(out.exists())
+        request.assert_not_called()
+
+    def test_queries_reads_v01_cases_without_network(self):
+        old_case = self.root / "old"
+        old_case.mkdir()
+        (old_case / "report.json").write_text(json.dumps({"version":"0.1.0", "plan":[
+            {"url":"javascript:alert(1)"},
+            {"url":"https://www.google.com/search?q=example"},
+            {"url":"https://www.google.com/search?q=other"}]}), encoding="utf-8")
+        output = io.StringIO()
+        with patch.object(Client, "get", side_effect=AssertionError("network")), redirect_stdout(output):
+            self.assertEqual(main(["queries", str(old_case), "--limit", "1"]), 0)
+        self.assertIn("q=example", output.getvalue())
+        self.assertNotIn("q=other", output.getvalue())
+        self.assertNotIn("javascript:", output.getvalue())
+
+    def test_empty_web_search_is_not_reported_as_disabled(self):
+        output = io.StringIO()
+        with patch.dict(os.environ, {"BRAVE_SEARCH_API_KEY":"dummy"}), patch.object(Client, "get", return_value=({}, "E1")), redirect_stdout(output):
+            code = main(["scan", "--username", "example", "--sources", "brave", "--web-budget", "1", "--require-web", "--out", str(self.root / "web-empty")])
+        self.assertEqual(code, 0)
+        self.assertNotIn("DID NOT RUN", output.getvalue())
+        self.assertNotIn("LIMITED COVERAGE", output.getvalue())
+        self.assertIn("No leads were retrieved", output.getvalue())
+
+    def test_invalid_github_handle_is_not_changed_or_requested(self):
+        client = FakeClient({})
+        self.case.target = Target(username="ss_demo")
+        status, detail = github(self.case, client, 5)
+        self.assertEqual(status, "skipped")
+        self.assertIn("retained unchanged", detail)
+        self.assertEqual(client.urls, [])
+        self.assertEqual(self.case.target.username, "ss_demo")
 
 
 if __name__ == "__main__":

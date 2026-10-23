@@ -15,7 +15,8 @@ def github(case, client, limit):
     if not t.username:
         return "skipped", "username required"
     if not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?", t.username):
-        return "skipped", "username not valid for GitHub"
+        return "skipped", "GitHub handles allow ASCII letters/digits/hyphens only (1-39 characters, no edge hyphen); " \
+                          "this handle is retained unchanged for other sources and web searches"
     headers = {}
     if os.getenv("Q4R_GITHUB_TOKEN"):
         headers["Authorization"] = "Bearer " + os.environ["Q4R_GITHUB_TOKEN"]
@@ -89,7 +90,7 @@ def openlibrary(case, client, limit):
 
 
 def brave(case, client, limit, budget):
-    token = os.getenv("BRAVE_SEARCH_API_KEY", "")
+    token = os.getenv("BRAVE_SEARCH_API_KEY", "").strip()
     if not token:
         return "skipped", "set BRAVE_SEARCH_API_KEY for automatic web/social search; manual links exported"
     count = 0

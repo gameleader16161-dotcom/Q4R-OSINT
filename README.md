@@ -27,6 +27,17 @@ python3 -m q4r --help
 python3 -m q4r scan --username YOUR_OWN_USERNAME --sources github
 ```
 
+## Update an existing install
+
+```bash
+cd Q4R-OSINT
+git pull --ff-only
+pipx install --force .
+q4r --version
+```
+
+Version 0.1.1 improves empty-result diagnostics and access to manual queries. `git pull` alone updates the clone, not the copy installed by pipx; reinstall after pulling.
+
 ## Usage
 
 ```bash
@@ -41,6 +52,32 @@ q4r verify cases/review-001
 ```
 
 At least one identifier is required. A name, when supplied, must have at least two whitespace-separated parts; names with three or more parts and Unicode/Arabic are supported. There is no artificial name-length limit in Q4R's input. Sources impose their own query budgets; oversized queries are marked skipped instead of silently shortening the name. Provider-specific username syntax is checked separately. Email is optional and is searched as a quoted public web mention. Q4R does not perform login, password reset, SMTP account probing or breach-database lookups.
+
+## Troubleshooting: 0 leads / web search skipped
+
+`0 leads` means the sources that actually ran returned no leads. It does not mean Q4R searched the whole web or proved that no account exists. An `ok` source status means the API request completed; each source now also prints its number of new leads.
+
+- A handle containing `_` is valid input to Q4R, but not a valid GitHub handle. The GitHub connector skips it and keeps the exact spelling for other sources and web queries. Do not remove underscores to guess a different account.
+- Archive and Open Library search item/book metadata. Many ordinary personal names have no catalog matches.
+- `BRAVE_SEARCH_API_KEY` missing means automatic general web/social search did not run. Configure your own Brave Search API key as shown below, or use the exported manual queries.
+
+Q4R 0.1.1 warns before collection when the key is missing. The report shows limited web coverage, empty reports expand the search plan, and every case includes `searches.txt`. To print links from an existing case, including one made with v0.1.0:
+
+```bash
+q4r queries cases/YOUR_CASE_DIRECTORY --limit 20
+# Or read the complete plan:
+cat cases/YOUR_CASE_DIRECTORY/searches.txt
+```
+
+The text file is new in 0.1.1; the `queries` command also reads old `report.json` files without needing that text file. Links are manual tasks, not results. You can open `report.html` with your browser using its printed file URI.
+
+To require configured automatic web search before any collection starts:
+
+```bash
+q4r scan --username YOUR_OWN_USERNAME --require-web
+```
+
+This validates local configuration, not API-key validity, credits or service availability. A skipped source remains a skip; successful empty API responses are not errors. Exit code 0 can still mean limited coverage, so check the coverage section or use `--require-web` when web collection is essential.
 
 ## Automatic sources and honest coverage
 
@@ -88,6 +125,7 @@ Each run creates a new case directory; existing directories are never overwritte
 report.html       Searchable local report, source status and SVG lead graph
 report.json       Structured results, source coverage and search plan
 findings.csv      Spreadsheet-compatible lead export
+searches.txt      Complete manual search plan as text (since 0.1.1)
 graph.graphml     Generic graph interchange (all leads)
 requests.jsonl    Endpoint, status, UTC time, elapsed time, response hash
 evidence/*.bin    Received API response bodies, including HTTP errors
@@ -126,6 +164,8 @@ Unit/integration tests use mocked API responses and do not investigate real peop
 ## بالعربي
 
 Q4R أداة سطر أوامر للبحث في المصادر العامة. بتثبتها مرة واحدة بالأوامر فوق، وبعدها بتكتب `q4r` من أي مكان. بتدخل الاسم من جزأين أو أكثر، اسم المستخدم، والبريد إذا متوفر. بتقدر تستخدم اسم عربي طويل؛ كل مصدر إله حدوده الخاصة للبحث.
+
+إذا طلعت `0 leads` ومعها `BRAVE_SEARCH_API_KEY` مفقود، البحث العام بالويب والسوشال ما اشتغل؛ المصادر اللي اشتغلت ما رجّعت نتائج. حدّث بـ`git pull --ff-only` وبعده `pipx install --force .`. النسخة 0.1.1 بتوضح هالسبب قبل البحث، وبتعرض عدد نتائج كل مصدر، وبتتيح روابط البحث القديمة بالأمر `q4r queries مسار_مجلد_الحالة`. الشرطة السفلية `_` بتبقى باليوزرنيم؛ تخطي GitHub سببه قواعد اسم المستخدم الخاصة بالمنصة.
 
 النسخة 0.1 بتبحث فعلياً عبر الموصلات المذكورة بالجدول. البحث العام في الويب والسوشال بده مفتاح Brave؛ بدونه بتطلع روابط بحث يدوية واضحة بالإضافة لنتائج الموصلات المتاحة. وجود 48 نطاقاً في الخطة لا يعني فحص 48 منصة مباشرة. ما في أداة بتضمن البحث بكل الإنترنت أو إثبات إن الحسابات كلها لنفس الشخص.
 

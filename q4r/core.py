@@ -10,6 +10,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote, urlencode, urlsplit, urlunsplit
 
+from . import __version__
+
 
 def now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -134,7 +136,7 @@ class Case:
             score, signals, kind, attributes))
 
     def data(self):
-        return dict(schema_version=1, tool="Q4R", version="0.1.0", started_at=self.started_at,
+        return dict(schema_version=1, tool="Q4R", version=__version__, started_at=self.started_at,
                     target=asdict(self.target), findings=[asdict(x) for x in self.findings],
                     requests=self.requests, coverage=self.coverage, plan=self.plan,
                     interpretation="Scores rank textual evidence, not probability or proof of identity. "

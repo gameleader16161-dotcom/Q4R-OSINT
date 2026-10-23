@@ -33,6 +33,9 @@ def write_report(case):
     data = case.data()
     directory = case.directory
     (directory / "report.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    (directory / "searches.txt").write_text(
+        "MANUAL SEARCH LINKS — these are research tasks, not retrieved findings.\n\n" +
+        "\n\n".join(p["query"] + "\n" + p["url"] for p in case.plan), encoding="utf-8")
     with (directory / "findings.csv").open("w", newline="", encoding="utf-8-sig") as f:
         writer = csv.writer(f)
         writer.writerow(["id", "source", "title", "url", "summary", "score", "signals", "evidence_id", "query"])
@@ -50,16 +53,26 @@ def write_report(case):
     coverage = "".join(f'<tr><td>{escape(c["source"])}</td><td>{escape(c["status"])}</td><td>{escape(c["detail"])}</td></tr>' for c in case.coverage)
     plan = "".join(f'<tr><td>{link(p["url"], p["query"])}</td><td>{escape(p["status"])}</td></tr>' for p in case.plan)
     graph = graph_svg(case)
+    web_coverage = next((c for c in case.coverage if c["source"] == "brave"), None)
+    notice = ""
+    if web_coverage and web_coverage["status"] in ("skipped", "error"):
+        notice = ('<section role="status"><h2>Limited web/social coverage</h2><p>' +
+                  ('Automatic web/social search did not run. ' if web_coverage["status"] == "skipped" else
+                   'Automatic web/social search encountered an error and may be incomplete. ') +
+                  escape(web_coverage["detail"]) + '</p><p>Use the search plan below or searches.txt for manual research. '
+                  'No retrieved leads does not prove that no accounts exist.</p></section>')
+    open_plan = ' open' if not case.findings else ''
     document = f'''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Q4R · Investigation report</title><style>{STYLE}</style><main><h1>Q4R</h1><p class="muted">Public-source investigation · {escape(case.started_at)}</p>
 <section><h2 dir="auto">{escape(case.target.name or case.target.username or case.target.email)}</h2>
 <p>{len(case.findings)} retrieved leads · {len(case.requests)} recorded HTTP attempts · {len(case.plan)} planned searches</p>
 <p>{escape(data["interpretation"])}</p><p>Search links are research tasks, not confirmed accounts or retrieved evidence.</p></section>
+{notice}
 <section><h2>Source coverage</h2><table><tr><th>Source</th><th>Status</th><th>Detail</th></tr>{coverage}</table></section>
 <section><h2>Evidence relationships</h2><p>Edges mean “returned for this input”, not “belongs to this person”. First 24 leads displayed; graph.graphml contains all leads.</p>{graph}</section>
 <h2>Retrieved leads</h2><input id="filter" aria-label="Filter leads" placeholder="Filter source, title or evidence…">{''.join(cards) or '<section>No leads retrieved. Check source coverage and manual searches.</section>'}
-<section><details><summary>Search plan · {len(case.plan)} tasks</summary><table>{plan}</table></details></section>
+<section><details{open_plan}><summary>Search plan · {len(case.plan)} tasks</summary><table>{plan}</table></details></section>
 <p class="muted">Evidence bodies and SHA-256 hashes are stored alongside this report. Reports contain personal data; keep them private.</p>
 </main><script>document.getElementById('filter').addEventListener('input',function(){{for(const item of document.querySelectorAll('.finding'))item.hidden=!item.textContent.toLowerCase().includes(this.value.toLowerCase())}})</script></html>'''
     (directory / "report.html").write_text(document, encoding="utf-8")

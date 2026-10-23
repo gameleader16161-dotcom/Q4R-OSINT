@@ -5,6 +5,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
+from . import __version__
+
 HOSTS = {"api.github.com", "gitlab.com", "keybase.io", "archive.org", "openlibrary.org", "api.search.brave.com"}
 MAX_BYTES = 4 * 1024 * 1024
 
@@ -33,7 +35,7 @@ class Client:
             start, status, body, error = time.monotonic(), 0, b"", ""
             retry_after = 1
             try:
-                request = Request(url, headers={"User-Agent": "Q4R/0.1 (+https://github.com/gameleader16161-dotcom/Q4R-OSINT)",
+                request = Request(url, headers={"User-Agent": f"Q4R/{__version__} (+https://github.com/gameleader16161-dotcom/Q4R-OSINT)",
                                                "Accept": "application/json", **(headers or {})})
                 with self.opener.open(request, timeout=self.timeout) as response:
                     status = response.status

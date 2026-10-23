@@ -36,7 +36,9 @@ pipx install --force .
 q4r --version
 ```
 
-Version 0.1.1 improves empty-result diagnostics and access to manual queries. `git pull` alone updates the clone, not the copy installed by pipx; reinstall after pulling.
+Version 0.1.2 fixes installing/updating a checkout that already contains `cases/` or extra folders. Version 0.1.1 improved empty-result diagnostics and access to manual queries. `git pull` alone updates the clone, not the copy installed by pipx; reinstall after pulling. `bash install.sh` can also be rerun to install the updated copy.
+
+If an earlier install failed with `Multiple top-level packages discovered in a flat-layout: ['q4r', 'cases']`, update to 0.1.2 using the commands above. The build now explicitly includes only the `q4r` package. You do not need to remove your reports or clone another copy. A failed installation leaves the previously installed command in place, which explains an old version still appearing after a successful `git pull`.
 
 ## Usage
 
@@ -155,11 +157,12 @@ The model's response must cite existing finding IDs. Q4R validates that IDs exis
 
 ```bash
 python3 -m unittest discover -s tests -v
+python3 tests/check_packaging.py
 python3 -m q4r scan --name "Example Researcher" --offline --out cases/smoke
 python3 -m q4r verify cases/smoke
 ```
 
-Unit/integration tests use mocked API responses and do not investigate real people. CI runs on Ubuntu with Python 3.10 and 3.12. Local live smoke tests should use your own account or a service-owned demonstration account. Exit codes: `0` completed (may include skips), `2` invalid input, `3` partial result with source/AI errors, `130` interrupted.
+Unit/integration tests use mocked API responses and do not investigate real people. The separate packaging regression creates synthetic case files, an unrelated package and a nested clone, builds a wheel, checks that those extra files are excluded, and installs/runs the CLI outside the checkout in a fresh environment. CI runs on Ubuntu with Python 3.10, 3.12 and 3.14. Local live smoke tests should use your own account or a service-owned demonstration account. Exit codes: `0` completed (may include skips), `2` invalid input, `3` partial result with source/AI errors, `130` interrupted.
 
 ## بالعربي
 

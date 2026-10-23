@@ -4,6 +4,8 @@ This runs separately from unit tests because it creates an isolated environment
 and lets pip provision the declared build backend.
 """
 import argparse
+import base64
+import json
 import os
 from pathlib import Path
 import re
@@ -65,6 +67,17 @@ def check(project, work_dir=None):
              "from q4r.core import load_sites; assert version('q4r-osint') == __version__; assert len(load_sites()) == 48"], root)
         run([command, "scan", "--username", "example_handle", "--offline", "--out", root / "installed-case"], root)
         run([command, "verify", root / "installed-case"], root)
+        # Exercise the real standalone worker and exec restart without a live update.
+        # The package was genuinely installed above; only the installer command is a fixture.
+        worker = subprocess.check_output([str(python), "-I", "-c",
+                                         "import q4r.update_worker as w; print(w.__file__)"], cwd=root, text=True).strip()
+        plan = dict(command=[str(python), "-I", "-c", "print('Installer fixture completed')"],
+                    python=str(python), version=expected, restart_args=["--version"])
+        payload = base64.urlsafe_b64encode(json.dumps(plan).encode()).decode("ascii")
+        output = subprocess.check_output([sys.executable, "-I", worker, payload], cwd=root, text=True, timeout=30)
+        if "installed successfully" not in output or "Restarting Q4R..." not in output or output.splitlines()[-1] != "Q4R " + expected:
+            raise AssertionError("Standalone update worker/restart failed: " + output)
+        print("PASS: standalone worker verifies the installed version and restarts isolated Q4R.")
         print("PASS: dirty checkout builds; generated cases and nested clones are excluded; installed CLI and registry work.")
 
 

@@ -1,4 +1,5 @@
 """Opt-in installation of a newer version from the fixed official repository."""
+import base64
 import json
 import os
 from pathlib import Path
@@ -73,18 +74,22 @@ def installation_command(sha):
     return [sys.executable, "-m", "pip", "install", "--upgrade", archive], env
 
 
-def install_update(version, sha):
+def install_update(version, sha, restart_args=None):
     version_key(version)
     command, env = installation_command(sha)
+    base_python = getattr(sys, "_base_executable", "")
+    if not base_python or not Path(base_python).is_file() or Path(base_python).resolve().is_relative_to(Path(sys.prefix).resolve()):
+        raise ValueError("Cannot locate Python outside this environment; use the manual update commands.")
+    plan = dict(command=command, python=sys.executable, version=version, restart_args=restart_args)
     print("Updating Q4R from the official repository...", flush=True)
-    subprocess.run(command, env=env, check=True)
-    # Isolated Python prevents an old clone in the current directory shadowing the install.
-    actual = subprocess.run([sys.executable, "-I", "-c",
-                             "from q4r import __version__; print(__version__)"],
-                            capture_output=True, text=True, check=True, timeout=15).stdout.strip()
-    if actual != version:
-        raise ValueError("Installed version verification failed; expected " + version)
-    print("Q4R " + version + " installed successfully.", flush=True)
+    # Release the target venv's interpreter/launcher before pipx touches them.
+    # The worker imports stdlib only, verifies installation and restarts Q4R.
+    worker = str(Path(__file__).with_name("update_worker.py"))
+    payload = base64.urlsafe_b64encode(json.dumps(plan).encode("utf-8")).decode("ascii")
+    arguments = [base_python, "-I", worker, payload]
+    if os.name == "nt":
+        arguments = [subprocess.list2cmdline([arg]) for arg in arguments]
+    os.execve(base_python, arguments, env)
 
 
 def check_update(argv, explicit=False, check_only=False):
@@ -114,7 +119,7 @@ def check_update(argv, explicit=False, check_only=False):
             if choice == "y":
                 break
             print("Please enter Y to update or N to continue.")
-        install_update(version, sha)
+        install_update(version, sha, restart_args=None if explicit else argv)
     except EOFError:
         return 0 if explicit else None
     except KeyboardInterrupt:
@@ -124,15 +129,7 @@ def check_update(argv, explicit=False, check_only=False):
         print("Update failed: " + str(exc))
         print("The update was not confirmed. Run q4r --version to check the installation.")
         return 1
-    if explicit:
-        return 0
-    print("Restarting Q4R...", flush=True)
-    # Restart in a clean interpreter; don't keep running old imported modules.
-    try:
-        os.execv(sys.executable, [sys.executable, "-I", "-m", "q4r", "--no-update-check", *argv])
-    except OSError as exc:
-        print("Update installed; automatic restart failed: " + str(exc) + ". Run q4r again.")
-        return 1
+    # Reached only if execve is replaced by a test double.
     return 0
 
 

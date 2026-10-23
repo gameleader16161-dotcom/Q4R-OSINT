@@ -1,8 +1,10 @@
 # Q4R validation
 
-## 0.4.0 update prompt
+## 0.4.1 update prompt
 
 Updater regression tests cover Y/N and lowercase/empty/invalid responses, commit-pinned metadata parsing without execution, numeric version ordering and downgrade avoidance, bounded metadata reads/timeouts, noninteractive and offline suppression, disabling checks, saved-report commands, network errors, cancellation, installation failure, isolated installed-version verification and restart arguments. Installation-command tests distinguish system Python, source execution, installed virtualenvs and the ordinary pipx home. These tests mock network and installer processes; they do not claim a real remote upgrade. The packaging check separately installs and runs the complete package in an isolated environment.
+
+The full suite now contains 99 unit tests. The packaging check additionally starts the actual standalone worker from outside its target venv and verifies a real isolated restart, using a fixture installer command. A separate live Windows smoke used a disposable pipx home with an injected `packaging` dependency: the notification condition was simulated with an older in-memory version, while fetching official metadata, downloading/installing the pinned 0.4.0 archive, verifying the installed version and restarting were real. The injected dependency survived. This exposed the initial running-interpreter file lock; 0.4.1 hands off to base Python before installing and uses a base64 argument payload for Windows quoting. This smoke does not claim an upgrade performed on the user's Kali machine.
 
 ## 0.3.1 public email summary
 

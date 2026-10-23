@@ -1,3 +1,4 @@
+import base64
 import io
 import json
 from pathlib import Path
@@ -9,6 +10,7 @@ from unittest.mock import Mock, patch
 from q4r import __version__
 from q4r.cli import main
 from q4r import update
+from q4r.update_worker import run_plan
 
 
 SHA = "a" * 40
@@ -65,8 +67,7 @@ class UpdateTests(unittest.TestCase):
         with patch("builtins.input", return_value="Y"), patch("q4r.update.install_update") as install, \
              patch("q4r.update.os.execv") as restart:
             self.assertEqual(update.check_update(args), 0)
-        install.assert_called_once_with(NEW, SHA)
-        self.assertEqual(restart.call_args.args[1][1:], ["-I", "-m", "q4r", "--no-update-check", *args])
+        install.assert_called_once_with(NEW, SHA, restart_args=args)
         self.assertIn("A Q4R update is available", self.output.getvalue())
 
     def test_no_or_enter_continues_without_installing(self):
@@ -155,19 +156,46 @@ class UpdateTests(unittest.TestCase):
         self.assertNotIn("installed successfully", self.output.getvalue())
 
     def test_installer_uses_argument_list_and_verifies_in_isolated_interpreter(self):
-        with patch("q4r.update.installation_command", return_value=(["pipx", "install", "--force", "official.zip"], {})), \
-             patch("q4r.update.subprocess.run", side_effect=[Mock(), Mock(stdout=NEW+"\n")]) as run:
-            update.install_update(NEW, SHA)
+        plan = dict(command=["pipx", "install", "--force", "official.zip"], python="target-python", version=NEW, restart_args=None)
+        with patch("q4r.update_worker.subprocess.run", side_effect=[Mock(), Mock(stdout=NEW+"\n")]) as run:
+            self.assertEqual(run_plan(plan), 0)
         self.assertIsInstance(run.call_args_list[0].args[0], list)
         self.assertTrue(run.call_args_list[0].kwargs["check"])
         self.assertEqual(run.call_args_list[1].args[0][1:3], ["-I", "-c"])
         self.assertIn("installed successfully", self.output.getvalue())
 
     def test_wrong_installed_version_is_a_failure(self):
-        with patch("q4r.update.installation_command", return_value=(["installer"], {})), \
-             patch("q4r.update.subprocess.run", side_effect=[Mock(), Mock(stdout="0.0.1\n")]):
-            with self.assertRaises(ValueError):
-                update.install_update(NEW, SHA)
+        plan = dict(command=["installer"], python="target-python", version=NEW, restart_args=[])
+        with patch("q4r.update_worker.subprocess.run", side_effect=[Mock(), Mock(stdout="0.0.1\n")]), \
+             patch("q4r.update_worker.os.execv") as restart:
+            self.assertEqual(run_plan(plan), 1)
+        restart.assert_not_called()
+
+    def test_handoff_uses_base_python_to_release_running_venv_before_install(self):
+        with tempfile.TemporaryDirectory() as prefix, patch("q4r.update.sys.prefix", prefix), \
+             patch("q4r.update.installation_command", return_value=(["installer"], {"PIP_NO_INPUT":"1"})), \
+             patch("q4r.update.os.execve") as handoff:
+            update.install_update(NEW, SHA, ["--browser"])
+        arguments = handoff.call_args.args[1]
+        self.assertEqual(arguments[1], "-I")
+        self.assertTrue(arguments[2].endswith("update_worker.py"))
+        self.assertEqual(json.loads(base64.urlsafe_b64decode(arguments[3]))["restart_args"], ["--browser"])
+        self.assertEqual(handoff.call_args.args[2], {"PIP_NO_INPUT":"1"})
+
+    def test_worker_restarts_only_after_verified_installation(self):
+        plan = dict(command=["installer"], python="target-python", version=NEW, restart_args=["--browser"])
+        with patch("q4r.update_worker.subprocess.run", side_effect=[Mock(), Mock(stdout=NEW+"\n")]), \
+             patch("q4r.update_worker.os.execv") as restart:
+            self.assertEqual(run_plan(plan), 0)
+        self.assertEqual(restart.call_args.args[1], ["target-python", "-I", "-m", "q4r", "--no-update-check", "--browser"])
+
+    def test_worker_install_failure_and_cancellation_never_restart(self):
+        plan = dict(command=["installer"], python="target-python", version=NEW, restart_args=[])
+        for error, code in ((subprocess.CalledProcessError(1, ["installer"]), 1), (KeyboardInterrupt(), 130)):
+            with self.subTest(code=code), patch("q4r.update_worker.subprocess.run", side_effect=error), \
+                 patch("q4r.update_worker.os.execv") as restart:
+                self.assertEqual(run_plan(plan), code)
+                restart.assert_not_called()
 
     def test_installer_refuses_system_python_or_source_shadowing(self):
         with patch("q4r.update.sys.prefix", "/system"), patch("q4r.update.sys.base_prefix", "/system"):

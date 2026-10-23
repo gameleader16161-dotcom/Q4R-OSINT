@@ -94,6 +94,12 @@ def account_lines(data):
                      "Email row: only the same address explicitly published in a retrieved public profile is shown.",
                      "غير مثبت = no public email link established; not proof of absence or account registration.",
                      "Profiles below are separate username/name search leads, not implied email links.", ""]
+    target = data.get("target", {})
+    if target.get("country"):
+        lines.extend(["Country keyword (supplied, unverified): " + public_text(target["country"]),
+                      "Country keywords narrow web queries; direct profiles may have no published country.", ""])
+    if target.get("aliases"):
+        lines.extend(["Additional supplied usernames (ownership unverified): " + ", ".join(public_text(x) for x in target["aliases"]), ""])
     findings = data.get("findings", [])
     grouped, seen = {}, set()
     for finding in findings:
@@ -121,6 +127,7 @@ def account_lines(data):
             lines.extend(grouped[source])
             continue
         if source not in coverage:
+            lines.append(f'{label}: ? [not checked / لم يُفحص]')
             continue
         row = coverage[source]
         states = {c.get("status") for c in checks if isinstance(c, dict) and c.get("source") == source}
@@ -166,6 +173,13 @@ def print_findings(data, limit=20):
     def display(value):
         encoding = getattr(sys.stdout,"encoding",None) or "utf-8"
         print(str(value).encode(encoding,errors="replace").decode(encoding))
+    display(email_summary_line(data) or "Email: not supplied / لم يتم إدخال بريد")
+    display("Email links require an explicitly published matching address; unverified does not mean absent.")
+    target = data.get("target", {})
+    if target.get("country"):
+        display("Country keyword (supplied, unverified): " + public_text(target["country"]))
+    if target.get("aliases"):
+        display("Additional supplied usernames: " + ", ".join(public_text(x) for x in target["aliases"]))
     findings = sorted(data.get("findings", []), key=lambda f: f.get("score", 0), reverse=True)
     display(f"\nRetrieved leads / النتائج: {len(findings)} (showing up to {limit})")
     for f in findings[:limit]:

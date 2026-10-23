@@ -7,7 +7,7 @@ import time
 import unicodedata
 from threading import RLock
 from functools import wraps
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote, urlencode, urlsplit, urlunsplit
@@ -50,19 +50,34 @@ class Target:
     name: str = ""
     username: str = ""
     email: str = ""
+    country: str = ""
+    aliases: list[str] = field(default_factory=list)
 
     def __post_init__(self):
         self.name = " ".join(clean(self.name).split())
         self.username = clean(self.username).removeprefix("@")
         self.email = clean(self.email)
+        self.country = " ".join(clean(self.country).split())
+        if len(self.country) > 80:
+            raise ValueError("Country: at most 80 characters")
+        if not isinstance(self.aliases, (list, tuple)) or len(self.aliases) > 5 or any(not isinstance(x, str) for x in self.aliases):
+            raise ValueError("Provide at most five additional usernames for the same subject")
+        self.aliases = list(dict.fromkeys(clean(value).removeprefix("@") for value in self.aliases))
+        self.aliases = [value for value in self.aliases if value and value != self.username]
         if self.name and len(self.name.split()) < 2:
             raise ValueError("Name must contain at least two parts; full Arabic names are supported")
-        if self.username and not re.fullmatch(r"[\w.-]{1,100}", self.username):
+        if any(not re.fullmatch(r"[\w.-]{1,100}", value) for value in self.usernames()):
             raise ValueError("Username: 1-100 letters, digits, dots, underscores or hyphens")
         if self.email and (len(self.email) > 254 or not re.fullmatch(r'[^\s@<>"\\]+@[^\s@<>"\\]+\.[^\s@<>"\\]+', self.email)):
             raise ValueError("Invalid email address")
-        if not any((self.name, self.username, self.email)):
+        if not any((self.name, self.username, self.email, self.aliases)):
             raise ValueError("Provide a name, username or email")
+
+    def usernames(self):
+        return ([self.username] if self.username else []) + self.aliases
+
+    def label(self):
+        return self.name or self.username or (self.aliases[0] if self.aliases else self.email)
 
 
 def safe_url(url):
@@ -97,7 +112,7 @@ class Finding:
 def score_match(target, title, summary, attributes):
     signals, score = [], 0
     # Independent fields only. Do not score URLs or search-query echoes.
-    if target.username and normalize(str(attributes.get("username", ""))) == normalize(target.username):
+    if any(normalize(str(attributes.get("username", ""))) == normalize(value) for value in target.usernames()):
         signals.append("exact public username; ownership unverified")
         score += 25
     if target.name and normalize(str(attributes.get("name", ""))) == normalize(target.name):
@@ -129,6 +144,10 @@ class Case:
         self.plan = []
         self.seen = set()
         self.checks = []
+
+    def for_username(self, username, include_name=True):
+        return CaseView(self, replace(self.target, username=username, aliases=[],
+                                     name=self.target.name if include_name else ""))
 
     @locked
     def record(self, source, url, status, body, elapsed, error="", evidence_type="http_response"):
@@ -173,6 +192,15 @@ class Case:
                     "All relationships are unverified leads. No match does not prove absence.")
 
 
+class CaseView:
+    """Per-lookup inputs with the parent's synchronized evidence store and scoring."""
+    def __init__(self, case, target):
+        self.case, self.target = case, target
+
+    def __getattr__(self, name):
+        return getattr(self.case, name)
+
+
 def load_sites(path=None):
     path = Path(path) if path else Path(__file__).with_name("sites.json")
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -190,15 +218,23 @@ def quoted(value):
 
 
 def build_plan(target, sites):
-    identities = [(k, v) for k, v in asdict(target).items() if v]
+    # Names stay intact: never search individual given/father/family-name tokens.
+    identities = [(k, v) for k, v in (("name", target.name), ("username", target.username), ("email", target.email)) if v]
+    identities += [("alias", value) for value in target.aliases]
     queries = [(k, quoted(v)) for k, v in identities]
     if target.name and target.username:
         queries.append(("name+username", quoted(target.name) + " " + quoted(target.username)))
+    if target.country:
+        queries = [(k + "+country", quoted(v) + " " + quoted(target.country)) for k, v in identities] + queries
     for kind, term in queries:
         yield dict(category="global", input=kind, query=term,
                    url="https://www.google.com/search?" + urlencode({"q": term}), status="manual_search_link")
     for site in sites:
         for kind, value in identities:
+            if target.country:
+                q = "site:" + site["domain"] + " " + quoted(value) + " " + quoted(target.country)
+                yield dict(category=site.get("category", "other"), input=kind+"+country", query=q,
+                           url="https://www.google.com/search?" + urlencode({"q": q}), status="manual_search_link")
             q = "site:" + site["domain"] + " " + quoted(value)
             yield dict(category=site.get("category", "other"), input=kind, query=q,
                        url="https://www.google.com/search?" + urlencode({"q": q}), status="manual_search_link")

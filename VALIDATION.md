@@ -1,5 +1,9 @@
 # Q4R validation
 
+## 0.5.0 context and email visibility
+
+The suite contains 110 unit tests. Eleven new tests cover country and alternate-handle validation, alias-only input, full-name preservation, absence of standalone country/father-name queries, quoted country terms and unscoped fallback, full email queries, no country identity-score bonus, parent-preserving lookup views, parallel per-handle isolation and counts, continuing after one handle fails, Arabic-comma prompts, and visible email rows in terminal/HTML/text even with zero results. Unchecked platforms are explicitly inconclusive. All new collection fixtures are synthetic and local; no private individuals or relatives' accounts were investigated. Country is a supplied query keyword, not verified geolocation. Family linkage and password-reset enumeration are not implemented.
+
 ## 0.4.1 update prompt
 
 Updater regression tests cover Y/N and lowercase/empty/invalid responses, commit-pinned metadata parsing without execution, numeric version ordering and downgrade avoidance, bounded metadata reads/timeouts, noninteractive and offline suppression, disabling checks, saved-report commands, network errors, cancellation, installation failure, isolated installed-version verification and restart arguments. Installation-command tests distinguish system Python, source execution, installed virtualenvs and the ordinary pipx home. These tests mock network and installer processes; they do not claim a real remote upgrade. The packaging check separately installs and runs the complete package in an isolated environment.

@@ -4,7 +4,7 @@
 
 Q4R is a Python command-line tool for Kali Linux and other systems with Python 3.10+. Enter a full name, a username and optionally an email. Q4R retrieves public leads, records response evidence and produces a searchable local report and relationship graph.
 
-Q4R **0.4.1** includes **18 built-in source connectors**, optional browser-based Google/Bing/DuckDuckGo result collection, optional Brave indexed web search and optional Wayback lookup. Twelve connectors perform direct public social/community profile checks. **A Brave key is not required for those checks or the browser option.** A separate registry of **48 domains** generates web-search queries; those are not 48 direct account detectors. Q4R is independent of Maltego and SpiderFoot and makes no claim to search the entire internet or outperform every other tool.
+Q4R **0.5.0** includes **18 built-in source connectors**, optional browser-based Google/Bing/DuckDuckGo result collection, optional Brave indexed web search and optional Wayback lookup. Twelve connectors perform direct public social/community profile checks. **A Brave key is not required for those checks or the browser option.** A separate registry of **48 domains** generates web-search queries; those are not 48 direct account detectors. Q4R is independent of Maltego and SpiderFoot and makes no claim to search the entire internet or outperform every other tool.
 
 ## Install on Kali
 
@@ -29,7 +29,7 @@ python3 -m q4r scan --username YOUR_OWN_USERNAME --sources github
 
 ## Update an existing install
 
-Install 0.4.1 once using the commands below to enable future update prompts:
+On 0.4.1 or later, launch q4r and answer Y when this newer version is offered. On older versions, use the commands below once to enable update prompts:
 
 ```bash
 cd Q4R-OSINT
@@ -80,6 +80,22 @@ q4r scan --name "Example Researcher" --sources bluesky,github_search
 q4r verify cases/review-001
 q4r results cases/review-001 --export-accounts
 ```
+
+## Country context and additional known usernames (0.5.0)
+
+Interactive mode now has two optional prompts: **Country** and **Other known usernames of the SAME subject**. Leave either blank to skip it. Separate additional usernames with English or Arabic commas, up to five. These are user-supplied alternate handles of the same subject, not relatives' usernames or proof of account ownership. Q4R does not infer family relationships or identify accounts through family members.
+
+```bash
+q4r scan --name "Example Researcher" --username example_handle --alias another_handle --alias older_handle --country Jordan --email me@example.org
+q4r scan --alias another_handle --country "الأردن" --sources social
+q4r scan --name "محمد أحمد حسن العلي" --country "الأردن" --browser --browser-budget 18
+```
+
+Country input creates prioritized quoted web queries such as `"example_handle" "Jordan"`, followed by the ordinary queries without a country. It is a **search keyword, not a verified location or a guarantee that an account is in that country**. Direct profile lookups still use exact supplied handles and do not discard profiles without location evidence. Country input alone is insufficient to start a scan; it does not add identity-score points. Optional browser and Brave search budgets still apply, so not every planned query is automatically executed.
+
+The full supplied name stays intact in the web plan, for example `"محمد أحمد حسن العلي" "الأردن"`. Q4R does not generate searches for the father's name, given name or surname individually. Direct social/community sources and GitHub/GitLab/Keybase now check every supplied handle. Name searches run once per source; response evidence and scores remain tied to the original target, with per-handle status saved in source coverage. A failure for one handle does not cancel the others. More handles mean more bounded lookups, not stronger proof that accounts belong to the same person.
+
+The supplied email row is now displayed in the **terminal and HTML report as well as the first line of `accounts.txt`**, including when zero accounts were found. If no email was entered, the terminal/HTML explicitly say so. Platforms that were not checked appear as `? [not checked]` in the text file. `غير مثبت / unverified` still means no explicit public email link was established; this update does not discover private account registrations or use password recovery. For old reports, `q4r results cases/YOUR_CASE --export-accounts` shows and exports the email row if that report saved an email; it cannot recover input that was never saved or rewrite the original HTML.
 
 ## Account text file and visible results
 

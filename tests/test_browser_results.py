@@ -231,7 +231,7 @@ class BrowserResultsTests(unittest.TestCase):
     def test_interactive_browser_flag_survives_target_prompts(self):
         factory=lambda target,directory: Case(target,self.root/"interactive")
         with patch("q4r.cli.Case",side_effect=factory),patch.dict("q4r.cli.PROVIDERS",{"fixture":lambda *args:("ok","empty fixture")},clear=True), \
-             patch.dict("os.environ",{"BRAVE_SEARCH_API_KEY":""}),patch("builtins.input",side_effect=["Example Researcher","ss_demo",""]), \
+             patch.dict("os.environ",{"BRAVE_SEARCH_API_KEY":""}),patch("builtins.input",side_effect=["Example Researcher","ss_demo","","",""]), \
              patch("q4r.cli.collect_browser",return_value=("ok","fixture browser complete")) as browser,redirect_stdout(io.StringIO()):
             self.assertEqual(main(["--browser"]),0)
         browser.assert_called_once()

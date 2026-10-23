@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import asdict
 
 from .core import safe_url, locked
-from .results import write_accounts
+from .results import write_accounts, email_summary_line
 
 
 STYLE = """
@@ -71,10 +71,15 @@ def write_report(case):
                   escape(web_coverage["detail"]) + '</p><p>Use the search plan below or searches.txt for manual research. '
                   'No retrieved leads does not prove that no accounts exist.</p></section>')
     open_plan = ' open' if not case.findings else ''
+    input_summary = email_summary_line(data) or "Email: not supplied / لم يتم إدخال بريد"
+    if case.target.country:
+        input_summary += "\nCountry keyword (supplied, unverified): " + case.target.country
+    if case.target.aliases:
+        input_summary += "\nAdditional supplied usernames (ownership unverified): " + ", ".join(case.target.aliases)
     document = f'''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Q4R · Investigation report</title><style>{STYLE}</style><main><h1>Q4R</h1><p class="muted">Public-source investigation · {escape(case.started_at)}</p>
-<section><h2 dir="auto">{escape(case.target.name or case.target.username or case.target.email)}</h2>
+<section><h2 dir="auto">{escape(case.target.label())}</h2><pre dir="auto">{escape(input_summary)}</pre>
 <p>{len(case.findings)} retrieved leads · {len(case.requests)} recorded HTTP attempts · {len(case.plan)} planned searches</p>
 <p>{escape(data["interpretation"])}</p><p>Search links are research tasks, not confirmed accounts or retrieved evidence.</p></section>
 {notice}
@@ -111,7 +116,7 @@ def write_graph(case):
         ET.SubElement(root, "{" + ns + "}key", {"id": key, "for": "all", "attr.name": key, "attr.type": "string"})
     graph = ET.SubElement(root, "{" + ns + "}graph", {"id": "Q4R", "edgedefault": "directed"})
     node = ET.SubElement(graph, "{" + ns + "}node", {"id": "input"})
-    ET.SubElement(node, "{" + ns + "}data", {"key": "label"}).text = case.target.name or case.target.username or case.target.email
+    ET.SubElement(node, "{" + ns + "}data", {"key": "label"}).text = case.target.label()
     external = set()
     for x in case.findings:
         node = ET.SubElement(graph, "{" + ns + "}node", {"id": x.id})

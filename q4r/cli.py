@@ -80,6 +80,8 @@ def main(argv=None):
     scan = sub.add_parser("scan", help="Collect public leads and export a report")
     for flag in ("name", "username", "email"):
         scan.add_argument("--" + flag, default="")
+    scan.add_argument("--country", default="", help="Optional country keyword for web searches; not a verified location filter")
+    scan.add_argument("--alias", action="append", default=[], help="Additional known username of the same subject; repeat up to five times")
     scan.add_argument("--out", type=Path, help="New case directory (never overwrites existing cases)")
     scan.add_argument("--offline", action="store_true", help="Build search plan only; no network requests")
     scan.add_argument("--no-update-check", action="store_true", default=argparse.SUPPRESS, help="Skip the interactive startup update check")
@@ -161,15 +163,21 @@ def main(argv=None):
         print("Enter an authorized subject. Leave optional fields blank. / الحقول اختيارية")
         try:
             use_browser = args.interactive_browser
-            args = p.parse_args(["scan", "--name", input("Full name / الاسم (2+ parts): "),
-                                "--username", input("Username / اسم المستخدم: "),
-                                "--email", input("Email / البريد (optional): ")] + (["--browser"] if use_browser else []))
+            values = ["scan", "--name", input("Full name / الاسم (2+ parts): "),
+                      "--username", input("Username / اسم المستخدم: "),
+                      "--email", input("Email / البريد (optional): "),
+                      "--country", input("Country / البلد (optional): ")]
+            aliases = input("Other known usernames of the SAME subject, comma-separated / يوزرات إضافية لنفس الشخص (optional): ")
+            for value in aliases.replace("،", ",").split(","):
+                if value.strip():
+                    values.extend(["--alias", value.strip()])
+            args = p.parse_args(values + (["--browser"] if use_browser else []))
         except EOFError:
             p.print_help()
             return 2
     try:
         args.browser = args.browser or args.interactive_browser
-        target = Target(args.name, args.username, args.email)
+        target = Target(args.name, args.username, args.email, args.country, args.alias)
         sites = load_sites(args.sites)
         selected = []
         for source in args.sources.split(","):
@@ -206,25 +214,45 @@ def main(argv=None):
     case.plan = list(build_plan(target, sites))
     client = Client(case, timeout=args.timeout)
     interrupted = False
+    def invoke(source, view):
+        try:
+            if source == "brave":
+                return brave(view, client, args.limit, args.web_budget)
+            if source == "wayback":
+                return wayback(view, client, min(args.limit, 10))
+            return PROVIDERS[source](view, client, args.limit)
+        except (SourceError, KeyError, TypeError, ValueError, AttributeError) as exc:
+            status = "blocked" if isinstance(exc, SourceError) and exc.status in (401, 403, 429) else "error"
+            detail = str(exc) if isinstance(exc, SourceError) else "Unexpected source schema: " + type(exc).__name__
+            case.check(source, status, detail, evidence_id=getattr(exc, "evidence_id", ""), query=view.target.username)
+            return status, detail
+
     def run_source(source):
+        lookups = []
         with case.lock:
             before = sum(f.source == source for f in case.findings)
         if args.offline:
             status, detail = "skipped", "offline mode: no requests sent"
         else:
-            try:
-                if source == "brave":
-                    status, detail = brave(case, client, args.limit, args.web_budget)
-                elif source == "wayback":
-                    status, detail = wayback(case, client, min(args.limit, 10))
-                else:
-                    status, detail = PROVIDERS[source](case, client, args.limit)
-            except (SourceError, KeyError, TypeError, ValueError, AttributeError) as exc:
-                status = "blocked" if isinstance(exc, SourceError) and exc.status in (401, 403, 429) else "error"
-                detail = str(exc) if isinstance(exc, SourceError) else "Unexpected source schema: " + type(exc).__name__
-                case.check(source, status, detail, evidence_id=getattr(exc, "evidence_id", ""))
+            if source in set(SOCIAL_PROVIDERS) | {"github", "gitlab", "keybase"}:
+                for index, username in enumerate(target.usernames() or [""]):
+                    state, message = invoke(source, case.for_username(username, include_name=index == 0))
+                    lookups.append(dict(username=username, status=state, detail=message))
+                status, detail = lookups[0]["status"], lookups[0]["detail"]
+                if len(lookups) > 1:
+                    states = {row["status"] for row in lookups}
+                    status = "ok" if "ok" in states else "not_found" if states == {"not_found"} else "skipped"
+                    for state in ("unconfirmed", "blocked", "error", "partial"):
+                        if state in states:
+                            status = "partial" if "ok" in states else state
+                    if states == {"not_found", "skipped"}:
+                        status = "unconfirmed"
+                    detail = "; ".join((row["username"] or "name search") + ": " + row["status"] for row in lookups)
+            else:
+                status, detail = invoke(source, case)
         with case.lock:
             return dict(source=source, status=status, detail=detail,
+                        lookups=lookups,
                         new_leads=sum(f.source == source for f in case.findings) - before)
 
     def completed(result):

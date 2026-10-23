@@ -4,12 +4,14 @@ import json
 import os
 import shlex
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from . import __version__
 from .core import Case, Target, build_plan, load_sites, safe_url
 from .http import Client, SourceError
 from .providers import PROVIDERS, brave, wayback
+from .social import SOCIAL_PROVIDERS
 from .report import write_report
 
 
@@ -76,6 +78,7 @@ def main(argv=None):
     scan.add_argument("--offline", action="store_true", help="Build search plan only; no network requests")
     scan.add_argument("--require-web", action="store_true", help="Fail before collection if automatic Brave web search is not configured")
     scan.add_argument("--sources", default=",".join(PROVIDERS) + ",brave", help="Comma-separated sources; q4r sources lists them")
+    scan.add_argument("--workers", type=bounded_int(1, 8), default=4, help="Parallel sources (default 4); each host remains rate-limited")
     scan.add_argument("--limit", type=bounded_int(1, 20), default=5, help="Results per source/query (default 5)")
     scan.add_argument("--web-budget", type=bounded_int(1, 500), default=12, help="Max Brave queries; may consume API credits (default 12)")
     scan.add_argument("--timeout", type=bounded_int(1, 60), default=15)
@@ -90,7 +93,9 @@ def main(argv=None):
     queries.add_argument("--limit", type=bounded_int(1, 2000), default=20)
     args = p.parse_args(argv)
     if args.command == "sources":
-        print("Live JSON connectors: " + ", ".join(PROVIDERS) + ", brave (API key), wayback (opt-in)")
+        print("Built-in source connectors: " + ", ".join(PROVIDERS) + ", brave (API key), wayback (opt-in)")
+        print("Social profile checks without a Brave key: " + ", ".join(SOCIAL_PROVIDERS))
+        print("Use --sources social for these only; some platforms may return blocked or unconfirmed.")
         print("Search registry (queries only; not automatic profile detectors):")
         for site in load_sites():
             print("  " + site["domain"] + " [" + site["category"] + "]")
@@ -120,7 +125,11 @@ def main(argv=None):
     try:
         target = Target(args.name, args.username, args.email)
         sites = load_sites(args.sites)
-        selected = list(dict.fromkeys(args.sources.split(",")))
+        selected = []
+        for source in args.sources.split(","):
+            source = source.strip()
+            selected.extend(SOCIAL_PROVIDERS if source == "social" else list(PROVIDERS) + ["brave"] if source == "all" else [source])
+        selected = list(dict.fromkeys(selected))
         unknown = set(selected) - (set(PROVIDERS) | {"brave"})
         if unknown:
             raise ValueError("Unknown sources: " + ", ".join(sorted(unknown)))
@@ -130,8 +139,8 @@ def main(argv=None):
                              "No collection was started; configure the API key and retry.")
         if "brave" in selected and not args.offline and not web_ready:
             print("[Q4R] LIMITED COVERAGE: BRAVE_SEARCH_API_KEY is missing.\n"
-                  "  Automatic web/social search will NOT run. Only the selected public API lookups will run.\n"
-                  "  Manual search links will be saved; skipped searches are not evidence of absent accounts.", flush=True)
+                  "  Brave's general web index will NOT run. Selected direct social/profile connectors still run without it.\n"
+                  "  Manual web search links will be saved; blocked/skipped sources are not evidence of absent accounts.", flush=True)
         from datetime import datetime, timezone
         from uuid import uuid4
         directory = args.out or Path("cases") / (datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid4().hex[:6])
@@ -141,26 +150,48 @@ def main(argv=None):
     case.plan = list(build_plan(target, sites))
     client = Client(case, timeout=args.timeout)
     interrupted = False
+    def run_source(source):
+        with case.lock:
+            before = sum(f.source == source for f in case.findings)
+        if args.offline:
+            status, detail = "skipped", "offline mode: no requests sent"
+        else:
+            try:
+                if source == "brave":
+                    status, detail = brave(case, client, args.limit, args.web_budget)
+                elif source == "wayback":
+                    status, detail = wayback(case, client, min(args.limit, 10))
+                else:
+                    status, detail = PROVIDERS[source](case, client, args.limit)
+            except (SourceError, KeyError, TypeError, ValueError, AttributeError) as exc:
+                status = "blocked" if isinstance(exc, SourceError) and exc.status in (401, 403, 429) else "error"
+                detail = str(exc) if isinstance(exc, SourceError) else "Unexpected source schema: " + type(exc).__name__
+                case.check(source, status, detail, evidence_id=getattr(exc, "evidence_id", ""))
+        with case.lock:
+            return dict(source=source, status=status, detail=detail,
+                        new_leads=sum(f.source == source for f in case.findings) - before)
+
+    def completed(result):
+        with case.lock:
+            case.coverage.append(result)
+        print(f'[Q4R] {result["source"]}: {result["status"]}: {result["detail"]}; {result["new_leads"]} new leads', flush=True)
+        write_report(case)
+
     try:
-        for source in selected + (["wayback"] if args.wayback else []):
-            print("[Q4R] " + source, flush=True)
-            before = len(case.findings)
-            if args.offline:
-                status, detail = "skipped", "offline mode: no requests sent"
-            else:
-                try:
-                    if source == "brave":
-                        status, detail = brave(case, client, args.limit, args.web_budget)
-                    elif source == "wayback":
-                        status, detail = wayback(case, client, min(args.limit, 10))
-                    else:
-                        status, detail = PROVIDERS[source](case, client, args.limit)
-                except (SourceError, KeyError, TypeError, ValueError, AttributeError) as exc:
-                    status = "error"
-                    detail = str(exc) if isinstance(exc, SourceError) else "Unexpected source schema: " + type(exc).__name__
-            case.coverage.append(dict(source=source, status=status, detail=detail, new_leads=len(case.findings) - before))
-            print("  " + status + ": " + detail + f"; {len(case.findings) - before} new leads", flush=True)
-            write_report(case)  # A failed later provider never discards earlier results.
+        print(f"[Q4R] Starting {len(selected)} sources; workers={args.workers}", flush=True)
+        with ThreadPoolExecutor(max_workers=args.workers) as executor:
+            futures = [executor.submit(run_source, source) for source in selected]
+            try:
+                for future in as_completed(futures):
+                    completed(future.result())
+            except KeyboardInterrupt:
+                client.cancelled.set()
+                for future in futures:
+                    future.cancel()
+                raise
+        # Archive lookups depend on already-collected URLs and run only after source workers finish.
+        if args.wayback:
+            completed(run_source("wayback"))
         if args.ai_model and not args.offline:
             try:
                 from .ai import summarize
@@ -179,7 +210,7 @@ def main(argv=None):
         print("No leads were retrieved from the sources that ran. This does not prove absence of public accounts.")
     web_coverage = next((c for c in case.coverage if c["source"] == "brave"), None)
     if web_coverage and web_coverage["status"] == "skipped" and not args.offline:
-        print("Automatic web/social search DID NOT RUN: " + web_coverage["detail"])
+        print("Brave indexed web search DID NOT RUN: " + web_coverage["detail"])
     if case.plan:
         print("Manual search links: " + str(case.directory.resolve() / "searches.txt"))
         print("Show links in this terminal: q4r queries " + shlex.quote(str(case.directory.resolve())) + " --limit 20")
@@ -189,4 +220,4 @@ def main(argv=None):
     print("Identity is unverified. Search links are planned tasks. Keep case files private.")
     if interrupted:
         return 130
-    return 3 if any(c["status"] == "error" for c in case.coverage) else 0
+    return 3 if any(c["status"] in ("error", "blocked", "partial") for c in case.coverage) else 0

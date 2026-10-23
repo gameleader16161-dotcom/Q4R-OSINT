@@ -6,7 +6,7 @@ import math
 import xml.etree.ElementTree as ET
 from dataclasses import asdict
 
-from .core import safe_url
+from .core import safe_url, locked
 
 
 STYLE = """
@@ -29,6 +29,7 @@ def link(url, label):
     return f'<a href="{escape(url)}" rel="noreferrer noopener" target="_blank">{escape(label)}</a>' if url else escape(label)
 
 
+@locked
 def write_report(case):
     data = case.data()
     directory = case.directory
@@ -51,14 +52,20 @@ def write_report(case):
                      f'<p>{escape("; ".join(x.signals))}</p><p class="muted">{escape(x.observed_at)} · Evidence {escape(x.evidence_id)}</p>'
                      f'<details><summary>Query and public fields</summary><pre>{escape(x.query)}\n{escape(json.dumps(x.attributes, ensure_ascii=False, indent=2))}</pre></details></section>')
     coverage = "".join(f'<tr><td>{escape(c["source"])}</td><td>{escape(c["status"])}</td><td>{escape(c["detail"])}</td></tr>' for c in case.coverage)
+    checks = "".join(f'<tr><td>{escape(c["source"])}</td><td>{escape(c["status"])}</td>'
+                     f'<td>{link(c["url"], c["query"] or c["url"])}</td><td>{escape(c["detail"])}</td>'
+                     f'<td>{escape(c["evidence_id"])}</td></tr>' for c in case.checks)
+    check_section = ('<section><h2>Direct profile checks</h2><p>Found means the source returned profile data; '
+                     'it does not prove ownership. Blocked/unconfirmed are inconclusive, not absent accounts.</p>'
+                     '<table><tr><th>Platform</th><th>Status</th><th>Input / URL</th><th>Evidence</th><th>ID</th></tr>' + checks + '</table></section>') if checks else ''
     plan = "".join(f'<tr><td>{link(p["url"], p["query"])}</td><td>{escape(p["status"])}</td></tr>' for p in case.plan)
     graph = graph_svg(case)
     web_coverage = next((c for c in case.coverage if c["source"] == "brave"), None)
     notice = ""
     if web_coverage and web_coverage["status"] in ("skipped", "error"):
-        notice = ('<section role="status"><h2>Limited web/social coverage</h2><p>' +
-                  ('Automatic web/social search did not run. ' if web_coverage["status"] == "skipped" else
-                   'Automatic web/social search encountered an error and may be incomplete. ') +
+        notice = ('<section role="status"><h2>Web index coverage</h2><p>' +
+                  ('Brave indexed web search did not run. ' if web_coverage["status"] == "skipped" else
+                   'Brave indexed web search encountered an error and may be incomplete. ') +
                   escape(web_coverage["detail"]) + '</p><p>Use the search plan below or searches.txt for manual research. '
                   'No retrieved leads does not prove that no accounts exist.</p></section>')
     open_plan = ' open' if not case.findings else ''
@@ -70,6 +77,7 @@ def write_report(case):
 <p>{escape(data["interpretation"])}</p><p>Search links are research tasks, not confirmed accounts or retrieved evidence.</p></section>
 {notice}
 <section><h2>Source coverage</h2><table><tr><th>Source</th><th>Status</th><th>Detail</th></tr>{coverage}</table></section>
+{check_section}
 <section><h2>Evidence relationships</h2><p>Edges mean “returned for this input”, not “belongs to this person”. First 24 leads displayed; graph.graphml contains all leads.</p>{graph}</section>
 <h2>Retrieved leads</h2><input id="filter" aria-label="Filter leads" placeholder="Filter source, title or evidence…">{''.join(cards) or '<section>No leads retrieved. Check source coverage and manual searches.</section>'}
 <section><details{open_plan}><summary>Search plan · {len(case.plan)} tasks</summary><table>{plan}</table></details></section>
@@ -102,10 +110,26 @@ def write_graph(case):
     graph = ET.SubElement(root, "{" + ns + "}graph", {"id": "Q4R", "edgedefault": "directed"})
     node = ET.SubElement(graph, "{" + ns + "}node", {"id": "input"})
     ET.SubElement(node, "{" + ns + "}data", {"key": "label"}).text = case.target.name or case.target.username or case.target.email
+    external = set()
     for x in case.findings:
         node = ET.SubElement(graph, "{" + ns + "}node", {"id": x.id})
         for key, value in (("label", x.title), ("url", x.url), ("evidence", x.evidence_id)):
             ET.SubElement(node, "{" + ns + "}data", {"key": key}).text = value
         edge = ET.SubElement(graph, "{" + ns + "}edge", {"source": "input", "target": x.id})
         ET.SubElement(edge, "{" + ns + "}data", {"key": "relation"}).text = "unverified search lead"
+        for item in x.attributes.get("links", []):
+            if not isinstance(item, dict):
+                continue
+            url = safe_url(item.get("url", ""))
+            if not url:
+                continue
+            key = "url_" + hashlib.sha256(url.encode()).hexdigest()[:20]
+            if key not in external:
+                external.add(key)
+                linked = ET.SubElement(graph, "{" + ns + "}node", {"id": key})
+                ET.SubElement(linked, "{" + ns + "}data", {"key": "label"}).text = url
+                ET.SubElement(linked, "{" + ns + "}data", {"key": "url"}).text = url
+            relation = ET.SubElement(graph, "{" + ns + "}edge", {"source": x.id, "target": key})
+            ET.SubElement(relation, "{" + ns + "}data", {"key": "relation"}).text = item.get("relation", "self-published link; unverified ownership")
+            ET.SubElement(relation, "{" + ns + "}data", {"key": "evidence"}).text = x.evidence_id
     ET.ElementTree(root).write(case.directory / "graph.graphml", encoding="utf-8", xml_declaration=True)

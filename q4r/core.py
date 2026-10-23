@@ -5,6 +5,8 @@ import json
 import re
 import time
 import unicodedata
+from threading import RLock
+from functools import wraps
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,6 +21,21 @@ def now():
 
 def normalize(value):
     return " ".join(unicodedata.normalize("NFKC", value).casefold().split())
+
+
+def locked(method):
+    @wraps(method)
+    def wrapped(self, *args, **kwargs):
+        with self.lock:
+            return method(self, *args, **kwargs)
+    return wrapped
+
+
+def public_text(value):
+    # Source text must remain valid XML and must not inject terminal control codes.
+    return "".join(c for c in str(value) if c in "\n\t" or
+                   (ord(c) >= 32 and not unicodedata.category(c).startswith("C")
+                    and ord(c) not in (0xfffe, 0xffff)))
 
 
 def clean(value):
@@ -99,6 +116,7 @@ def score_match(target, title, summary, attributes):
 
 class Case:
     def __init__(self, target, directory):
+        self.lock = RLock()
         self.target = target
         self.directory = Path(directory)
         self.directory.mkdir(parents=True, exist_ok=False, mode=0o700)
@@ -110,7 +128,9 @@ class Case:
         self.coverage = []
         self.plan = []
         self.seen = set()
+        self.checks = []
 
+    @locked
     def record(self, source, url, status, body, elapsed, error=""):
         evidence_id = "E" + str(len(self.requests) + 1).zfill(5)
         # Store response bodies only; credentials/authorization headers are never persisted.
@@ -124,21 +144,30 @@ class Case:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
         return evidence_id
 
+    @locked
     def add(self, source, title, url, summary, evidence_id, query, attributes=None, kind="candidate"):
         url = safe_url(url)
         if not url or (source, url, query) in self.seen:
             return
         self.seen.add((source, url, query))
         attributes = attributes or {}
-        score, signals = score_match(self.target, str(title), str(summary), attributes)
+        title, summary = public_text(title)[:1000], public_text(summary)[:3000]
+        score, signals = score_match(self.target, title, summary, attributes)
         self.findings.append(Finding("F" + str(len(self.findings) + 1).zfill(5), source,
-            str(title)[:1000], url, str(summary)[:3000], now(), evidence_id, query,
+            title, url, summary, now(), evidence_id, query,
             score, signals, kind, attributes))
 
+    @locked
+    def check(self, source, status, detail, url="", evidence_id="", query=""):
+        self.checks.append(dict(source=source, status=status, detail=detail, url=safe_url(url),
+                                evidence_id=evidence_id, query=query, observed_at=now()))
+
+    @locked
     def data(self):
         return dict(schema_version=1, tool="Q4R", version=__version__, started_at=self.started_at,
                     target=asdict(self.target), findings=[asdict(x) for x in self.findings],
-                    requests=self.requests, coverage=self.coverage, plan=self.plan,
+                    requests=list(self.requests), coverage=list(self.coverage), plan=list(self.plan),
+                    checks=list(self.checks),
                     interpretation="Scores rank textual evidence, not probability or proof of identity. "
                     "All relationships are unverified leads. No match does not prove absence.")
 

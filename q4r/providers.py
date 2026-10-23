@@ -27,8 +27,29 @@ def github(case, client, limit):
     case.add("github", d.get("name") or d["login"], d["html_url"], d.get("bio") or "", e, t.username,
              {"username": d["login"], "name": d.get("name"), "email": d.get("email"),
               "public_repos": d.get("public_repos"), "created_at": d.get("created_at"),
-              "website": safe_url(d.get("blog", ""))})
+              "website": safe_url(d.get("blog", "")),
+              "links": [{"url": safe_url(d.get("blog", "")), "relation": "website explicitly published by this profile"}]
+                       if safe_url(d.get("blog", "")) else []})
     return "ok", "public profile retrieved; ownership not verified"
+
+
+def github_search(case, client, limit):
+    """Search public display names independently of the supplied handle grammar."""
+    if not case.target.name:
+        return "skipped", "name required for public GitHub display-name search"
+    query = quoted(case.target.name) + " in:fullname type:user"
+    if len(query) > 256:
+        return "skipped", "display-name query exceeds search budget"
+    headers = {}
+    if os.getenv("Q4R_GITHUB_TOKEN"):
+        headers["Authorization"] = "Bearer " + os.environ["Q4R_GITHUB_TOKEN"]
+    d, eid = client.get("github_search", endpoint("https://api.github.com/search/users", q=query, per_page=limit), headers)
+    if not isinstance(d, dict) or not isinstance(d.get("items"), list):
+        raise ValueError("GitHub search schema changed")
+    for item in d["items"][:limit]:
+        case.add("github_search", item["login"], item["html_url"], "Public display-name search candidate; name and ownership need review",
+                 eid, query, {"username": item["login"], "match_type": "search candidate"})
+    return "ok", f'{len(d["items"][:limit])} public display-name search candidates'
 
 
 def gitlab(case, client, limit):
@@ -127,5 +148,7 @@ def wayback(case, client, limit):
     return "ok", f"looked up {len(urls)} discovered URLs; snapshots may contain outdated data"
 
 
-PROVIDERS = {"github": github, "gitlab": gitlab, "keybase": keybase,
-             "archive": archive, "openlibrary": openlibrary}
+from .social import SOCIAL_PROVIDERS
+
+PROVIDERS = {"github": github, "github_search": github_search, "gitlab": gitlab, "keybase": keybase,
+             "archive": archive, "openlibrary": openlibrary, **SOCIAL_PROVIDERS}

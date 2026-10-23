@@ -215,7 +215,7 @@ class Q4RTests(unittest.TestCase):
         self.assertEqual(code, 3)
         report = json.loads((out / "report.json").read_text(encoding="utf-8"))
         self.assertEqual(len(report["findings"]), 1)
-        self.assertEqual([x["status"] for x in report["coverage"]], ["error", "ok"])
+        self.assertEqual({x["source"]: x["status"] for x in report["coverage"]}, {"github": "error", "gitlab": "ok"})
 
     def test_existing_case_never_overwritten(self):
         with self.assertRaises(FileExistsError):
@@ -243,7 +243,7 @@ class Q4RTests(unittest.TestCase):
         text = output.getvalue()
         self.assertEqual(code, 0)
         self.assertLess(text.index("LIMITED COVERAGE"), text.index("[Q4R] github"))
-        self.assertIn("Automatic web/social search DID NOT RUN", text)
+        self.assertIn("Brave indexed web search DID NOT RUN", text)
         self.assertIn("0 new leads", text)
         self.assertIn("q4r queries", text)
         self.assertIn("https://www.google.com/search", text)
@@ -252,7 +252,7 @@ class Q4RTests(unittest.TestCase):
         self.assertEqual(data["findings"], [])
         self.assertIn("searches.txt", json.loads((out / "manifest.json").read_text()))
         html = (out / "report.html").read_text(encoding="utf-8")
-        self.assertIn("Automatic web/social search did not run", html)
+        self.assertIn("Brave indexed web search did not run", html)
         self.assertIn('<details open><summary>Search plan', html)
 
     def test_require_web_fails_before_creating_case_or_sending_requests(self):

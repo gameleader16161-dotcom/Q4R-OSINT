@@ -4,7 +4,7 @@
 
 Q4R is a Python command-line tool for Kali Linux and other systems with Python 3.10+. Enter a full name, a username and optionally an email. Q4R retrieves public leads, records response evidence and produces a searchable local report and relationship graph.
 
-Q4R 0.1 is an independent initial release, not a merger of Maltego and SpiderFoot. It does not claim to outperform them, identify a person conclusively, access every website or collect private accounts. It uses six automatic source integrations, an optional Wayback lookup, and a separate registry of **48 domains for search queries**. Registry domains are not 48 live account detectors.
+Q4R **0.2.0** includes **18 built-in source connectors**, optional Brave indexed web search and optional Wayback lookup. Twelve of those connectors perform direct public social/community profile checks. **A Brave key is not required for those checks.** A separate registry of **48 domains** generates indexed web-search queries; those are not 48 direct account detectors. Q4R is independent of Maltego and SpiderFoot and makes no claim to search the entire internet or outperform every other tool.
 
 ## Install on Kali
 
@@ -36,9 +36,9 @@ pipx install --force .
 q4r --version
 ```
 
-Version 0.1.2 fixes installing/updating a checkout that already contains `cases/` or extra folders. Version 0.1.1 improved empty-result diagnostics and access to manual queries. `git pull` alone updates the clone, not the copy installed by pipx; reinstall after pulling. `bash install.sh` can also be rerun to install the updated copy.
+Version 0.2.0 adds direct social profile retrieval, public account search on Bluesky and GitHub, parallel collection, per-profile checks and self-published link edges in GraphML. It retains the 0.1.2 packaging fix for checkouts containing `cases/` or extra folders. `git pull` alone updates the clone, not the copy installed by pipx; reinstall after pulling. `bash install.sh` can also be rerun to install the updated copy.
 
-If an earlier install failed with `Multiple top-level packages discovered in a flat-layout: ['q4r', 'cases']`, update to 0.1.2 using the commands above. The build now explicitly includes only the `q4r` package. You do not need to remove your reports or clone another copy. A failed installation leaves the previously installed command in place, which explains an old version still appearing after a successful `git pull`.
+If an earlier install failed with `Multiple top-level packages discovered in a flat-layout: ['q4r', 'cases']`, update using the commands above. The build explicitly includes only the `q4r` package. You do not need to remove your reports or clone another copy. A failed installation leaves the previously installed command in place, which explains an old version still appearing after a successful `git pull`.
 
 ## Usage
 
@@ -50,6 +50,8 @@ q4r scan --name "Example Researcher" --username example_handle --out cases/revie
 q4r scan --name "محمد أحمد العلي" --username my_handle --email me@example.org
 q4r scan --name "Example Researcher" --offline --out cases/plan-only
 q4r scan --username YOUR_OWN_USERNAME --sources github,gitlab,keybase --wayback
+q4r scan --username YOUR_OWN_USERNAME --sources social --workers 4
+q4r scan --name "Example Researcher" --sources bluesky,github_search
 q4r verify cases/review-001
 ```
 
@@ -61,7 +63,7 @@ At least one identifier is required. A name, when supplied, must have at least t
 
 - A handle containing `_` is valid input to Q4R, but not a valid GitHub handle. The GitHub connector skips it and keeps the exact spelling for other sources and web queries. Do not remove underscores to guess a different account.
 - Archive and Open Library search item/book metadata. Many ordinary personal names have no catalog matches.
-- `BRAVE_SEARCH_API_KEY` missing means automatic general web/social search did not run. Configure your own Brave Search API key as shown below, or use the exported manual queries.
+- `BRAVE_SEARCH_API_KEY` missing means Brave's general web index did not run. Direct social profile connectors and Bluesky/GitHub account search can still run without that key. Configure Brave for indexed web coverage, or use the manual web queries alongside the direct results.
 
 Q4R 0.1.1 warns before collection when the key is missing. The report shows limited web coverage, empty reports expand the search plan, and every case includes `searches.txt`. To print links from an existing case, including one made with v0.1.0:
 
@@ -83,9 +85,35 @@ This validates local configuration, not API-key validity, credits or service ava
 
 ## Automatic sources and honest coverage
 
+### Direct social/community profiles (no Brave key)
+
+| Connector | Retrieval and positive evidence | Important limits |
+|---|---|---|
+| `bluesky` | Public getProfile and searchActors; returns DID, handle, display name and description | Short handles are tried as `HANDLE.bsky.social` only when valid; search results are candidates |
+| `mastodon` | Exact public lookup on mastodon.social; account ID and acct | Other instances are not directly queried; optional name search requires `Q4R_MASTODON_TOKEN` |
+| `telegram` | Public t.me profile/channel page with title and account detail block | Generic “Contact @handle” pages are **unconfirmed**, not existence evidence |
+| `instagram` | Public profile metadata or structured profile ID tied to the requested canonical URL | Login/rate limits can prevent retrieval; private content is not collected |
+| `facebook` | Matching canonical URL, public profile ID and vanity username | Handles are not guessed from real names; login restrictions may block the page |
+| `youtube` | Channel metadata with channel ID and a matching owner/vanity handle URL | Checks `@handle`, not arbitrary video URLs |
+| `x` | Canonical profile URL and explicitly matching username/profile metadata | JavaScript/login-only responses remain unconfirmed or blocked |
+| `pinterest` | Canonical profile URL and matching profile metadata/structured identity | A successful HTTP response by itself is not evidence |
+| `tiktok` | Matching canonical URL and structured uniqueId plus profile ID | Network restrictions and layout changes may make retrieval unavailable |
+| `reddit` | Public user-about JSON with matching username and public ID | Reddit may deny unauthenticated requests; a 403 is **blocked**, not missing |
+| `devto` | Public user API: matching username, public ID, display name and summary | Also records explicitly published website/GitHub/X links without following them |
+| `hackernews` | Official public HN user API: matching ID and public about text | Null is reported as not found in that API |
+
+Use `--sources social` to run these twelve only. The default runs all built-in connectors and optional Brave. `--sources` also accepts a comma-separated subset. It does not remove punctuation from a supplied handle to invent another account. An exact-handle lookup can only find that spelling; it does not prove that accounts on different platforms belong to the same person.
+
+HTML retrieval is conservative: `found` requires matching profile evidence, not just HTTP 200. `not_found` means an explicit endpoint absence response; `blocked` means denial, rate limit, login/challenge or an unfollowed redirect; `unconfirmed` means insufficient evidence; `error` means a failed request/schema; `skipped` means incompatible input. `partial` means a connector returned some evidence and also encountered blocked/failed checks. All these outcomes appear in the report's **Direct profile checks** table with evidence IDs. Unknown HTML remains a check, not a finding.
+
+Website layouts, restrictions and regional responses change. See [validation notes](VALIDATION.md) for the observed 0.2.0 smoke results, including unavailable services; fixture tests are not proof of worldwide availability.
+
+### Other built-in connectors and optional indexes
+
 | Source | What Q4R actually does | Requirements / limitations |
 |---|---|---|
 | GitHub | Exact username public profile lookup | Optional `Q4R_GITHUB_TOKEN` for API limits; no private data |
+| `github_search` | Public display-name account search, independent of exact username rules | Name required; search candidates need review; public search rate limits apply |
 | GitLab | Exact username public API lookup | Service may require authentication or block requests |
 | Keybase | Public username lookup | Source-specific username syntax |
 | Internet Archive | Quoted name search in archive item metadata | Not a full-text search of every archived web page |
@@ -93,9 +121,9 @@ This validates local configuration, not API-key validity, credits or service ava
 | Brave Search | Quoted global and site-specific indexed web searches | Requires `BRAVE_SEARCH_API_KEY`; index coverage, not direct access to every social network |
 | Wayback (opt-in) | Availability lookup for up to 10 retrieved URLs | Requires `--wayback`; returns closest available snapshot, not every snapshot |
 
-Every source has an `ok`, `skipped`, `error` or `interrupted` coverage entry. A blocked, unavailable or malformed response is an error, never an “account exists” result. GitHub's missing-profile HTTP 404 is recorded as an HTTP error. An empty successful search is not proof that no account exists. Each provider currently reads one bounded result page; exhaustive crawling and recursive expansion are not implemented.
+Each source reports its own status and result count. A blocked, unavailable or malformed response is never an “account exists” result. The original GitHub exact-lookup connector still records a missing-profile HTTP 404 as an HTTP error. An empty successful search is not proof that no account exists. Providers read bounded result pages; exhaustive crawling and recursive expansion are not implemented.
 
-Automatic web/social searches use Brave's API:
+Optional indexed web/social mentions use Brave's API:
 
 ```bash
 # Keep secrets in your shell environment, never in the repository.
@@ -105,7 +133,7 @@ q4r scan --name "Example Researcher" --username example_handle --web-budget 150 
 unset BRAVE_SEARCH_API_KEY
 ```
 
-Without this key Q4R still runs the public connectors and exports manual Google search links. It does **not** claim those manual tasks were executed. `--web-budget` defaults to 12 queries and can be set to 1–500; these requests may consume your provider credits. The plan starts with global queries, then registry domains in order. `--limit` is 1–20 results per query/source; it is not a total scan limit. Sources have per-host pacing (at least 1.1 seconds) and bounded retries. A 429/502/503/504 response gets at most one retry, honoring a numeric `Retry-After` up to five seconds; longer delays stop that source. No CAPTCHA or login bypass is attempted.
+Without this key Q4R still runs selected direct connectors and exports manual Google search links. It does **not** claim those manual tasks were executed. `--web-budget` defaults to 12 queries and can be set to 1–500; these requests may consume your provider credits. The plan starts with global queries, then registry domains in order. `--limit` is 1–20 results per query/source; it is not a total scan limit. `--workers` runs 1–8 sources in parallel (default 4), with a shared per-host lock enforcing at least 1.1 seconds between requests. Evidence IDs, response writes and reports are synchronized. Wayback runs after collection because it needs retrieved URLs. A 429/502/503/504 gets at most one bounded retry, honoring numeric `Retry-After` up to five seconds. Redirects, CAPTCHA and login gates are not bypassed. Ctrl+C cancels queued requests and lets in-flight requests finish or time out before saving the final manifest.
 
 Add domains by editing `q4r/sites.json`, or provide a local registry:
 
@@ -125,7 +153,7 @@ Each run creates a new case directory; existing directories are never overwritte
 
 ```text
 report.html       Searchable local report, source status and SVG lead graph
-report.json       Structured results, source coverage and search plan
+report.json       Structured results, direct checks, source coverage and search plan
 findings.csv      Spreadsheet-compatible lead export
 searches.txt      Complete manual search plan as text (since 0.1.1)
 graph.graphml     Generic graph interchange (all leads)
@@ -139,7 +167,7 @@ Responses are capped at 4 MiB; a truncated response is recorded as an error. Req
 
 `q4r verify CASE_DIR` detects changed/missing files against `manifest.json`. Hashes support local integrity checks; they are not digital signatures, trusted timestamps or a legal chain of custody. Someone who can alter both evidence and the manifest can defeat this check. An interruption saves partial results; an operating-system crash during a write can still leave a partial file.
 
-The **evidence score is a transparent ranking heuristic, not confidence probability**: exact public username +25, exact public display name +25 (otherwise a name phrase in returned text +10), exact explicitly published email +40; maximum 90. Source URLs and echoed query strings do not count as evidence. Scores never establish identity. Graph edges mean “returned for this input”; accounts are not merged into one person. Independent corroboration and human review are required.
+The **evidence score is a transparent ranking heuristic, not confidence probability**: exact public username +25, exact public display name +25 (otherwise a name phrase in returned text +10), exact explicitly published email +40; maximum 90. Source URLs and echoed query strings do not count as evidence. Scores never establish identity. Seed-to-finding graph edges mean “returned for this input”; accounts are not merged into one person. GraphML also records website/account links explicitly published in GitHub and DEV profiles, with the original finding's evidence ID. Identical linked URLs share a URL node; that is a published link relationship, not proof of common ownership. External links are not fetched automatically.
 
 ## Optional local AI draft
 
@@ -162,15 +190,15 @@ python3 -m q4r scan --name "Example Researcher" --offline --out cases/smoke
 python3 -m q4r verify cases/smoke
 ```
 
-Unit/integration tests use mocked API responses and do not investigate real people. The separate packaging regression creates synthetic case files, an unrelated package and a nested clone, builds a wheel, checks that those extra files are excluded, and installs/runs the CLI outside the checkout in a fresh environment. CI runs on Ubuntu with Python 3.10, 3.12 and 3.14. Local live smoke tests should use your own account or a service-owned demonstration account. Exit codes: `0` completed (may include skips), `2` invalid input, `3` partial result with source/AI errors, `130` interrupted.
+Unit/integration tests use mocked API responses, including negative/blocked cases and concurrent evidence writes. The separate packaging regression creates synthetic case files, an unrelated package and a nested clone, builds a wheel, checks that extra files are excluded, and installs/runs the CLI outside the checkout in a fresh environment. CI runs on Ubuntu with Python 3.10, 3.12 and 3.14. Live smoke tests use public service-owned profiles (and an official HN API example), not the investigation subject. Exit codes: `0` completed (may include skipped/unconfirmed/not-found checks), `2` invalid input, `3` partial run with error/blocked/partial coverage, `130` interrupted.
 
 ## بالعربي
 
 Q4R أداة سطر أوامر للبحث في المصادر العامة. بتثبتها مرة واحدة بالأوامر فوق، وبعدها بتكتب `q4r` من أي مكان. بتدخل الاسم من جزأين أو أكثر، اسم المستخدم، والبريد إذا متوفر. بتقدر تستخدم اسم عربي طويل؛ كل مصدر إله حدوده الخاصة للبحث.
 
-إذا طلعت `0 leads` ومعها `BRAVE_SEARCH_API_KEY` مفقود، البحث العام بالويب والسوشال ما اشتغل؛ المصادر اللي اشتغلت ما رجّعت نتائج. حدّث بـ`git pull --ff-only` وبعده `pipx install --force .`. النسخة 0.1.1 بتوضح هالسبب قبل البحث، وبتعرض عدد نتائج كل مصدر، وبتتيح روابط البحث القديمة بالأمر `q4r queries مسار_مجلد_الحالة`. الشرطة السفلية `_` بتبقى باليوزرنيم؛ تخطي GitHub سببه قواعد اسم المستخدم الخاصة بالمنصة.
+النسخة **0.2.0** بتفحص ملفات عامة مباشرة على Instagram وFacebook وYouTube وX وPinterest وTelegram وBluesky وMastodon وReddit وTikTok وDEV وHacker News، بدون مفتاح Brave. نجاح كل منصة يعتمد على توفر صفحتها العامة؛ إذا في حظر أو تسجيل دخول أو بيانات غير كافية، بتظهر الحالة بوضوح بدل اختراع نتيجة. بحث الاسم متوفر عبر Bluesky وGitHub، لكنه بيرجع مرشحين بحاجة مراجعة.
 
-النسخة 0.1 بتبحث فعلياً عبر الموصلات المذكورة بالجدول. البحث العام في الويب والسوشال بده مفتاح Brave؛ بدونه بتطلع روابط بحث يدوية واضحة بالإضافة لنتائج الموصلات المتاحة. وجود 48 نطاقاً في الخطة لا يعني فحص 48 منصة مباشرة. ما في أداة بتضمن البحث بكل الإنترنت أو إثبات إن الحسابات كلها لنفس الشخص.
+لتشغيل موصلات التواصل فقط: `q4r scan --username YOUR_USERNAME --sources social`. وللتشغيل التفاعلي اكتب `q4r`. التحديث: `git pull --ff-only` وبعده `pipx install --force .`. الشرطة السفلية `_` بتبقى باليوزرنيم؛ بعض المنصات ما بتسمح فيها. مفتاح Brave اختياري للبحث الإضافي بفهرس الويب. وجود 48 نطاقاً في الخطة لا يعني فحص 48 منصة مباشرة، وصفر نتائج ما بيثبت عدم وجود الحساب.
 
 افتح `report.html` من مجلد الحالة لمراجعة النتائج، الأدلة، الأخطاء والرسم. الذكاء الاصطناعي المحلي اختياري للتلخيص فقط، ومخرجاته بحاجة مراجعة. استخدم الأداة ضمن نطاق مصرح، واحفظ التقارير محلياً لأنها ممكن تحتوي معلومات شخصية.
 
@@ -184,5 +212,10 @@ Q4R أداة سطر أوامر للبحث في المصادر العامة. بت
 - [Open Library search](https://openlibrary.org/dev/docs/api/search)
 - [Brave web search](https://api-dashboard.search.brave.com/app/documentation/web-search/codes)
 - [Ollama generate API](https://docs.ollama.com/api/generate)
+- [Bluesky public HTTP API](https://docs.bsky.app/docs/api/app-bsky-actor-search-actors)
+- [Mastodon account endpoints](https://docs.joinmastodon.org/methods/accounts/)
+- [Reddit user endpoints](https://www.reddit.com/dev/api/)
+- [Forem public user API](https://developers.forem.com/api/v0#tag/users)
+- [Hacker News public API](https://github.com/HackerNews/API)
 
 MIT licensed. Q4R is not affiliated with these services. Source availability, terms, limits and API schemas can change.

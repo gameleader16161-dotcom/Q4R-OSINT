@@ -95,6 +95,10 @@ def account_lines(data):
                      "غير مثبت = no public email link established; not proof of absence or account registration.",
                      "Profiles below are separate username/name search leads, not implied email links.", ""]
     target = data.get("target", {})
+    forms = data.get("name_search", {}).get("forms", [])
+    if len(forms) > 1:
+        lines.extend(["Full-name spellings planned (not verified aliases):"] +
+                     ["  " + public_text(row["value"]) + " [" + public_text(row["origin"]) + "]" for row in forms] + [""])
     if target.get("country"):
         lines.extend(["Country keyword (supplied, unverified): " + public_text(target["country"]),
                       "Country keywords narrow web queries; direct profiles may have no published country.", ""])
@@ -173,6 +177,9 @@ def print_findings(data, limit=20):
     def display(value):
         encoding = getattr(sys.stdout,"encoding",None) or "utf-8"
         print(str(value).encode(encoding,errors="replace").decode(encoding))
+    public_profiles = {f.get("url") for f in data.get("findings", []) if f.get("kind") == "public_profile" or f.get("source") in ("github", "gitlab", "keybase")}
+    display(f"Public profile URLs retrieved: {len(public_profiles)} / ملفات عامة جُلبت؛ ملكيتها تحتاج مراجعة")
+    display("Public email association only / السطر التالي لربط البريد المنشور، وليس وجود الحسابات:")
     display(email_summary_line(data) or "Email: not supplied / لم يتم إدخال بريد")
     display("Email links require an explicitly published matching address; unverified does not mean absent.")
     target = data.get("target", {})
@@ -180,6 +187,14 @@ def print_findings(data, limit=20):
         display("Country keyword (supplied, unverified): " + public_text(target["country"]))
     if target.get("aliases"):
         display("Additional supplied usernames: " + ", ".join(public_text(x) for x in target["aliases"]))
+    forms = data.get("name_search", {}).get("forms", [])
+    if len(forms) > 1:
+        display("Full-name spellings planned (not verified aliases):")
+        for row in forms:
+            display("  " + public_text(row["value"]) + " [" + public_text(row["origin"]) + "]")
+    language = data.get("name_search", {}).get("country_context", {}).get("language", "unspecified")
+    if language != "unspecified":
+        display("Country search-language context (not the subject's verified language): " + language)
     findings = sorted(data.get("findings", []), key=lambda f: f.get("score", 0), reverse=True)
     display(f"\nRetrieved leads / النتائج: {len(findings)} (showing up to {limit})")
     for f in findings[:limit]:
@@ -192,4 +207,7 @@ def print_findings(data, limit=20):
             display("  " + link)
         if f.get("summary"):
             display("  " + public_text(f["summary"]).replace("\n", " ")[:600])
-        display("  Unverified lead; check the source before attributing this account to the subject.")
+        direct = f.get("kind") == "public_profile" or f.get("source") in ("github", "gitlab", "keybase")
+        display("  Status: public profile data retrieved; ownership needs review." if direct else "  Status: search candidate; profile and ownership need review.")
+        if f.get("signals"):
+            display("  Evidence: " + public_text("; ".join(f["signals"])))

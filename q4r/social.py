@@ -8,6 +8,7 @@ from functools import partial
 from urllib.parse import quote, urlencode, urlsplit
 
 from .core import normalize, public_text, safe_url
+from .names import name_match
 
 
 def url(base, **params):
@@ -22,7 +23,7 @@ def status_for(case, source, start):
     checks = [c for c in case.checks[start:] if c["source"] == source]
     states = {c["status"] for c in checks}
     count = sum(f.source == source for f in case.findings)
-    status = "ok" if "found" in states else "not_found" if states == {"not_found"} else "skipped"
+    status = "ok" if "found" in states else "not_found" if states == {"not_found"} else "unconfirmed" if "filtered" in states else "skipped"
     for state in ("unconfirmed", "blocked", "error"):
         if state in states:
             status = "partial" if "found" in states else state
@@ -62,6 +63,7 @@ def add_profile(case, source, data, profile_url, query, eid, username, name, sum
 
 def bluesky(case, client, limit):
     source, start, t = "bluesky", len(case.checks), case.target
+    seen = set()
     if not t.username and not t.name:
         return "skipped", "name or username required"
     if t.username and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.-]{0,252}", t.username) and "_" not in t.username:
@@ -73,8 +75,9 @@ def bluesky(case, client, limit):
                 raise ValueError("Bluesky profile schema changed")
             add_profile(case, source, d, "https://bsky.app/profile/" + quote(d["handle"], safe=""), actor, eid,
                         d["handle"], d.get("displayName", ""), d.get("description", ""), did=d["did"])
+            seen.add(d["handle"])
     # Search is independent of the platform's exact handle grammar; returned accounts are candidates.
-    queries = list(dict.fromkeys(q for q in (t.username, t.name) if q and len(q) <= 300))
+    queries = list(dict.fromkeys(q for q in [t.username, *[row["value"] for row in t.name_forms()]] if q and len(q) <= 300))
     for query in queries:
         d, eid, status = request_json(case, client, source,
             url("https://public.api.bsky.app/xrpc/app.bsky.actor.searchActors", q=query, limit=limit), query)
@@ -85,12 +88,25 @@ def bluesky(case, client, limit):
             raise ValueError("Bluesky search schema changed")
         if not actors:
             case.check(source, "not_found", "No indexed actor search results; not proof of absence", query=query, evidence_id=eid)
+        removed = 0
         for item in actors[:limit]:
             if not item.get("did") or not item.get("handle"):
                 raise ValueError("Bluesky search profile missing identity fields")
+            match = name_match(t, item.get("displayName") or "")
+            exact_handle = query == t.username and normalize(item["handle"]) in {normalize(t.username), normalize(t.username+".bsky.social")}
+            if item["handle"] == "handle.invalid" or not (match or exact_handle):
+                removed += 1
+                continue
+            if item["handle"] in seen:
+                case.check(source, "found", "Matching public profile already retained; additional search observation saved", query=query, evidence_id=eid)
+                continue
+            seen.add(item["handle"])
             add_profile(case, source, item, "https://bsky.app/profile/" + quote(item["handle"], safe=""), query, eid,
                         item["handle"], item.get("displayName", ""), item.get("description", ""), did=item["did"],
-                        match_type="search candidate; not a verified match to the supplied person")
+                        match_type="search candidate; not a verified match to the supplied person",
+                        name_evidence=match[0] if match else "exact supplied handle")
+        if removed:
+            case.check(source, "filtered", f"{removed} returned rows lacked all supplied name parts or an exact supplied handle, or had an invalid handle", query=query, evidence_id=eid)
     return status_for(case, source, start)
 
 
@@ -108,17 +124,25 @@ def mastodon(case, client, limit):
                         d.get("note", ""), instance="mastodon.social", public_id=d["id"])
     elif not token:
         return "skipped", "mastodon.social exact lookup needs an ASCII username; name search needs Q4R_MASTODON_TOKEN"
-    if t.name and token:
+    for spelling in t.name_forms() if token else []:
+        name = spelling["value"]
+        if len(name) > 300:
+            case.check(source, "skipped", "Full-name query exceeds budget; name was not shortened", query=name)
+            continue
         d, eid, status = request_json(case, client, source,
-            url("https://mastodon.social/api/v1/accounts/search", q=t.name[:300], limit=limit, resolve="false"), t.name, headers)
+            url("https://mastodon.social/api/v1/accounts/search", q=name, limit=limit, resolve="false"), name, headers)
         if status == "ok":
             if not isinstance(d, list):
                 raise ValueError("Mastodon search schema changed")
             for item in d[:limit]:
-                add_profile(case, source, item, item.get("url", ""), t.name, eid, item["acct"],
-                            item.get("display_name", ""), item.get("note", ""), match_type="display-name search candidate")
+                match = name_match(t, text_only(item.get("display_name") or ""))
+                if not match:
+                    case.check(source, "filtered", "Returned name did not match all supplied name parts", query=name, evidence_id=eid)
+                    continue
+                add_profile(case, source, item, item.get("url", ""), name, eid, item["acct"],
+                            item.get("display_name", ""), item.get("note", ""), match_type="display-name search candidate", name_evidence=match[0])
             if not d:
-                case.check(source, "not_found", "No account search results", query=t.name, evidence_id=eid)
+                case.check(source, "not_found", "No account search results", query=name, evidence_id=eid)
     return status_for(case, source, start)
 
 

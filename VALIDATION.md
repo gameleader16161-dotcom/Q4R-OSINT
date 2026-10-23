@@ -1,5 +1,9 @@
 # Q4R validation
 
+## 0.6.0 multilingual full-name candidates
+
+The suite contains 125 unit tests. Fifteen added regressions exercise Arabic/Latin spelling provenance and bounds, unknown-name fallback, Portuguese country/accent context without renaming people, manual spellings and disabling expansion, accepting longer names while rejecting single-token/sub-token/discontiguous matches, separate evidence scores, never inferring email links from names, actual scripted Bluesky/Mastodon requests in both scripts, repeated-profile deduplication, exact-handle preservation, filtered versus absent states, no name truncation, distinct-query browser scheduling, bounded GitHub spelling queries without invented returned name fields, and offline saved metadata/display. Fixtures use synthetic profiles and do not investigate the screenshot's subject. These are implementation tests, not measured identity accuracy or proof that every spelling/site works live. The separate real-Firefox CI smoke still uses intercepted offline engine fixtures.
+
 ## 0.5.0 context and email visibility
 
 The suite contains 110 unit tests. Eleven new tests cover country and alternate-handle validation, alias-only input, full-name preservation, absence of standalone country/father-name queries, quoted country terms and unscoped fallback, full email queries, no country identity-score bonus, parent-preserving lookup views, parallel per-handle isolation and counts, continuing after one handle fails, Arabic-comma prompts, and visible email rows in terminal/HTML/text even with zero results. Unchecked platforms are explicitly inconclusive. All new collection fixtures are synthetic and local; no private individuals or relatives' accounts were investigated. Country is a supplied query keyword, not verified geolocation. Family linkage and password-reset enumeration are not implemented.

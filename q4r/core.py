@@ -13,6 +13,7 @@ from pathlib import Path
 from urllib.parse import quote, urlencode, urlsplit, urlunsplit
 
 from . import __version__
+from .names import name_forms, name_match, country_context
 
 
 def now():
@@ -52,12 +53,21 @@ class Target:
     email: str = ""
     country: str = ""
     aliases: list[str] = field(default_factory=list)
+    name_variants: list[str] = field(default_factory=list)
+    expand_names: bool = True
 
     def __post_init__(self):
         self.name = " ".join(clean(self.name).split())
         self.username = clean(self.username).removeprefix("@")
         self.email = clean(self.email)
         self.country = " ".join(clean(self.country).split())
+        if not isinstance(self.name_variants, (list, tuple)) or len(self.name_variants) > 3 or any(not isinstance(x, str) for x in self.name_variants):
+            raise ValueError("Provide at most three additional full-name spellings")
+        self.name_variants = list(dict.fromkeys(" ".join(clean(value).split()) for value in self.name_variants))
+        if self.name_variants and not self.name:
+            raise ValueError("Provide the full name before additional name spellings")
+        if any(len(value) > 200 or len(value.split()) < 2 for value in self.name_variants):
+            raise ValueError("Additional name spellings need 2+ parts and at most 200 characters")
         if len(self.country) > 80:
             raise ValueError("Country: at most 80 characters")
         if not isinstance(self.aliases, (list, tuple)) or len(self.aliases) > 5 or any(not isinstance(x, str) for x in self.aliases):
@@ -75,6 +85,9 @@ class Target:
 
     def usernames(self):
         return ([self.username] if self.username else []) + self.aliases
+
+    def name_forms(self):
+        return name_forms(self.name, self.name_variants, self.expand_names)
 
     def label(self):
         return self.name or self.username or (self.aliases[0] if self.aliases else self.email)
@@ -115,11 +128,13 @@ def score_match(target, title, summary, attributes):
     if any(normalize(str(attributes.get("username", ""))) == normalize(value) for value in target.usernames()):
         signals.append("exact public username; ownership unverified")
         score += 25
-    if target.name and normalize(str(attributes.get("name", ""))) == normalize(target.name):
-        signals.append("exact public display name; identity unverified")
-        score += 25
-    elif target.name and normalize(target.name) in normalize(title + " " + summary):
-        signals.append("name phrase in returned text")
+    match = name_match(target, str(attributes.get("name") or ""))
+    if match:
+        points = {"exact":25, "extended":20, "spelling_candidate":10}
+        signals.append(match[0] + " public display-name match; identity unverified")
+        score += points[match[0]]
+    elif target.name and name_match(target, title + " " + summary):
+        signals.append("full name/spelling phrase in returned text; review required")
         score += 10
     if target.email and normalize(str(attributes.get("email", ""))) == normalize(target.email):
         signals.append("exact email explicitly published by source")
@@ -147,7 +162,8 @@ class Case:
 
     def for_username(self, username, include_name=True):
         return CaseView(self, replace(self.target, username=username, aliases=[],
-                                     name=self.target.name if include_name else ""))
+                                     name=self.target.name if include_name else "",
+                                     name_variants=self.target.name_variants if include_name else []))
 
     @locked
     def record(self, source, url, status, body, elapsed, error="", evidence_type="http_response"):
@@ -188,6 +204,7 @@ class Case:
                     target=asdict(self.target), findings=[asdict(x) for x in self.findings],
                     requests=list(self.requests), coverage=list(self.coverage), plan=list(self.plan),
                     checks=list(self.checks),
+                    name_search=dict(forms=self.target.name_forms(), country_context=country_context(self.target.country)),
                     interpretation="Scores rank textual evidence, not probability or proof of identity. "
                     "All relationships are unverified leads. No match does not prove absence.")
 
@@ -219,13 +236,19 @@ def quoted(value):
 
 def build_plan(target, sites):
     # Names stay intact: never search individual given/father/family-name tokens.
-    identities = [(k, v) for k, v in (("name", target.name), ("username", target.username), ("email", target.email)) if v]
+    identities = [("name" if index == 0 else "name_variant", row["value"]) for index, row in enumerate(target.name_forms())]
+    identities += [(k, v) for k, v in (("username", target.username), ("email", target.email)) if v]
     identities += [("alias", value) for value in target.aliases]
     queries = [(k, quoted(v)) for k, v in identities]
     if target.name and target.username:
         queries.append(("name+username", quoted(target.name) + " " + quoted(target.username)))
     if target.country:
-        queries = [(k + "+country", quoted(v) + " " + quoted(target.country)) for k, v in identities] + queries
+        scoped = [(k + "+country", quoted(v) + " " + quoted(target.country)) for k, v in identities]
+        localized = []
+        for term in country_context(target.country)["terms"]:
+            if term != target.country:
+                localized += [(k+"+country_variant", quoted(v)+" "+quoted(term)) for k, v in identities]
+        queries = scoped + localized + queries
     for kind, term in queries:
         yield dict(category="global", input=kind, query=term,
                    url="https://www.google.com/search?" + urlencode({"q": term}), status="manual_search_link")

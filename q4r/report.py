@@ -76,6 +76,9 @@ def write_report(case):
         input_summary += "\nCountry keyword (supplied, unverified): " + case.target.country
     if case.target.aliases:
         input_summary += "\nAdditional supplied usernames (ownership unverified): " + ", ".join(case.target.aliases)
+    if len(data["name_search"]["forms"]) > 1:
+        input_summary += "\nFull-name spellings planned (not verified aliases):\n" + "\n".join(
+            row["value"] + " [" + row["origin"] + "]" for row in data["name_search"]["forms"])
     document = f'''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Q4R · Investigation report</title><style>{STYLE}</style><main><h1>Q4R</h1><p class="muted">Public-source investigation · {escape(case.started_at)}</p>

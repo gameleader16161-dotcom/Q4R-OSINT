@@ -82,6 +82,8 @@ def main(argv=None):
         scan.add_argument("--" + flag, default="")
     scan.add_argument("--country", default="", help="Optional country keyword for web searches; not a verified location filter")
     scan.add_argument("--alias", action="append", default=[], help="Additional known username of the same subject; repeat up to five times")
+    scan.add_argument("--name-variant", action="append", default=[], help="Additional supplied full-name spelling; repeat up to three times")
+    scan.add_argument("--no-name-expansion", action="store_true", help="Disable automatic name spelling suggestions")
     scan.add_argument("--out", type=Path, help="New case directory (never overwrites existing cases)")
     scan.add_argument("--offline", action="store_true", help="Build search plan only; no network requests")
     scan.add_argument("--no-update-check", action="store_true", default=argparse.SUPPRESS, help="Skip the interactive startup update check")
@@ -177,7 +179,8 @@ def main(argv=None):
             return 2
     try:
         args.browser = args.browser or args.interactive_browser
-        target = Target(args.name, args.username, args.email, args.country, args.alias)
+        target = Target(args.name, args.username, args.email, args.country, args.alias,
+                        name_variants=args.name_variant, expand_names=not args.no_name_expansion)
         sites = load_sites(args.sites)
         selected = []
         for source in args.sources.split(","):
@@ -202,7 +205,8 @@ def main(argv=None):
         if "brave" in selected and not args.offline and not web_ready:
             print("[Q4R] LIMITED COVERAGE: BRAVE_SEARCH_API_KEY is missing.\n"
                   "  Brave's general web index will NOT run. Selected direct social/profile connectors still run without it.\n"
-                  "  Manual web search links will be saved; blocked/skipped sources are not evidence of absent accounts.", flush=True)
+                  "  Manual web search links will be saved; blocked/skipped sources are not evidence of absent accounts.\n"
+                  "  For rendered web searches without a Brave key: q4r --browser (requires browser extra/runtime).", flush=True)
         if args.browser and not args.offline:
             print("[Q4R] Browser search enabled: " + ", ".join(engines) + "; no Brave key required.",flush=True)
         from datetime import datetime, timezone

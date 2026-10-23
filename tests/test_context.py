@@ -45,8 +45,8 @@ class ContextTests(unittest.TestCase):
 
     def test_email_queries_preserve_full_address_and_country_fallback(self):
         plan = list(build_plan(Target(email="me@example.org", country="Jordan"), []))
-        self.assertEqual([p["query"] for p in plan], ['"me@example.org" "Jordan"', '"me@example.org"'])
-        self.assertEqual([p["input"] for p in plan], ["email+country", "email"])
+        self.assertEqual([p["query"] for p in plan], ['"me@example.org" "Jordan"', '"me@example.org" "الأردن"', '"me@example.org"'])
+        self.assertEqual([p["input"] for p in plan], ["email+country", "email+country_variant", "email"])
 
     def test_country_input_cannot_inject_search_operators_outside_quotes(self):
         plan = list(build_plan(Target(username="demo", country='Jordan" OR "elsewhere'), []))

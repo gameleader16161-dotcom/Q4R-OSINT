@@ -103,64 +103,73 @@ def extract_visible(page, engine, limit):
     return rows
 
 
+def browser_tasks(plan, engines):
+    """Try distinct queries first, rotating engines within the same page budget."""
+    queries = []
+    seen = set()
+    for entry in plan:
+        query = entry["query"]
+        if query not in seen and len(query) <= 600:
+            queries.append(entry)
+            seen.add(query)
+    for offset in range(len(engines)):
+        for index, entry in enumerate(queries):
+            yield entry, engines[(index+offset) % len(engines)]
+
+
 def search_pages(case, context, engines, budget, limit, timeout, interactive=False, interval=2):
     """Browser context is injectable so the driver is tested against offline page fixtures."""
     page, attempts, blocked, statuses = context.new_page(), 0, set(), []
     try:
-        for query_entry in case.plan:
+        for query_entry, engine in browser_tasks(case.plan, engines):
             if attempts >= budget:
                 break
             query = query_entry["query"]
-            if len(query) > 600:
+            source = "browser_" + engine
+            if engine in blocked:
                 continue
-            for engine in engines:
-                if attempts >= budget:
-                    break
-                source = "browser_" + engine
-                if engine in blocked:
-                    continue
-                if attempts and interval:
-                    page.wait_for_timeout(interval * 1000)
-                endpoint, started = engine_url(engine,query), time.monotonic()
-                print(f"[Q4R] Browser {engine}: {public_text(query)}", flush=True)
-                attempts += 1
-                rows, title, body, current_url, status = [], "", "", endpoint, 0
+            if attempts and interval:
+                page.wait_for_timeout(interval * 1000)
+            endpoint, started = engine_url(engine,query), time.monotonic()
+            print(f"[Q4R] Browser {engine}: {public_text(query)}", flush=True)
+            attempts += 1
+            rows, title, body, current_url, status = [], "", "", endpoint, 0
+            try:
+                response = page.goto(endpoint, wait_until="domcontentloaded", timeout=timeout*1000)
+                status = response.status if response else 0
                 try:
-                    response = page.goto(endpoint, wait_until="domcontentloaded", timeout=timeout*1000)
-                    status = response.status if response else 0
-                    try:
-                        page.locator(ENGINES[engine]["selector"]).first.wait_for(state="visible",timeout=min(timeout*1000,5000))
-                    except Exception:
-                        pass
+                    page.locator(ENGINES[engine]["selector"]).first.wait_for(state="visible",timeout=min(timeout*1000,5000))
+                except Exception:
+                    pass
+                title, current_url = page.title(), page.url
+                body = page.locator("body").inner_text(timeout=3000)[:12000]
+                rows = extract_visible(page,engine,limit)
+                state, detail = page_state(engine,current_url,title,body,status,len(rows))
+                if interactive and sys.stdin.isatty():
+                    print("Review this search page in the browser. Q4R will not solve challenges or click login/consent controls.")
+                    input("Press Enter to read the currently visible results, or Ctrl+C to stop: ")
                     title, current_url = page.title(), page.url
                     body = page.locator("body").inner_text(timeout=3000)[:12000]
                     rows = extract_visible(page,engine,limit)
                     state, detail = page_state(engine,current_url,title,body,status,len(rows))
-                    if interactive and sys.stdin.isatty():
-                        print("Review this search page in the browser. Q4R will not solve challenges or click login/consent controls.")
-                        input("Press Enter to read the currently visible results, or Ctrl+C to stop: ")
-                        title, current_url = page.title(), page.url
-                        body = page.locator("body").inner_text(timeout=3000)[:12000]
-                        rows = extract_visible(page,engine,limit)
-                        state, detail = page_state(engine,current_url,title,body,status,len(rows))
-                except KeyboardInterrupt:
-                    raise
-                except Exception as exc:
-                    state, detail = "error", "Browser navigation/extraction failed: " + type(exc).__name__
-                if state == "blocked":
-                    blocked.add(engine)  # Do not keep hammering a challenged engine.
-                if state != "found":
-                    rows = []
-                observation = dict(engine=engine,query=query,requested_url=endpoint,page_url=safe_url(current_url),
-                                   title=public_text(title),visible_text=public_text(body),results=rows,status=state,detail=detail)
-                eid = case.record(source,endpoint,status,json.dumps(observation,ensure_ascii=False).encode("utf-8"),
-                                  time.monotonic()-started,error=detail if state in ("error","blocked") else "",
-                                  evidence_type="browser_rendered_observation")
-                case.check(source,state,detail,endpoint,eid,query)
-                statuses.append(state)
-                for row in rows:
-                    case.add(source,row["title"],row["url"],row["snippet"],eid,query,
-                             {"search_engine":engine,"match_type":"indexed web search candidate; not a verified profile"},kind="web_search_lead")
+            except KeyboardInterrupt:
+                raise
+            except Exception as exc:
+                state, detail = "error", "Browser navigation/extraction failed: " + type(exc).__name__
+            if state == "blocked":
+                blocked.add(engine)  # Do not keep hammering a challenged engine.
+            if state != "found":
+                rows = []
+            observation = dict(engine=engine,query=query,requested_url=endpoint,page_url=safe_url(current_url),
+                               title=public_text(title),visible_text=public_text(body),results=rows,status=state,detail=detail)
+            eid = case.record(source,endpoint,status,json.dumps(observation,ensure_ascii=False).encode("utf-8"),
+                              time.monotonic()-started,error=detail if state in ("error","blocked") else "",
+                              evidence_type="browser_rendered_observation")
+            case.check(source,state,detail,endpoint,eid,query)
+            statuses.append(state)
+            for row in rows:
+                case.add(source,row["title"],row["url"],row["snippet"],eid,query,
+                         {"search_engine":engine,"match_type":"indexed web search candidate; not a verified profile"},kind="web_search_lead")
         if not attempts:
             return "skipped", "No eligible browser queries in the plan"
         failed = any(s in ("error","blocked") for s in statuses)

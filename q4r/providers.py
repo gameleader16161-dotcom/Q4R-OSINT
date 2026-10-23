@@ -37,19 +37,26 @@ def github_search(case, client, limit):
     """Search public display names independently of the supplied handle grammar."""
     if not case.target.name:
         return "skipped", "name required for public GitHub display-name search"
-    query = quoted(case.target.name) + " in:fullname type:user"
-    if len(query) > 256:
-        return "skipped", "display-name query exceeds search budget"
     headers = {}
     if os.getenv("Q4R_GITHUB_TOKEN"):
         headers["Authorization"] = "Bearer " + os.environ["Q4R_GITHUB_TOKEN"]
-    d, eid = client.get("github_search", endpoint("https://api.github.com/search/users", q=query, per_page=limit), headers)
-    if not isinstance(d, dict) or not isinstance(d.get("items"), list):
-        raise ValueError("GitHub search schema changed")
-    for item in d["items"][:limit]:
-        case.add("github_search", item["login"], item["html_url"], "Public display-name search candidate; name and ownership need review",
-                 eid, query, {"username": item["login"], "match_type": "search candidate"})
-    return "ok", f'{len(d["items"][:limit])} public display-name search candidates'
+    count, searched, seen = 0, 0, set()
+    for spelling in case.target.name_forms():
+        query = quoted(spelling["value"]) + " in:fullname type:user"
+        if len(query) > 256:
+            continue
+        d, eid = client.get("github_search", endpoint("https://api.github.com/search/users", q=query, per_page=limit), headers)
+        if not isinstance(d, dict) or not isinstance(d.get("items"), list):
+            raise ValueError("GitHub search schema changed")
+        searched += 1
+        for item in d["items"][:limit]:
+            if item["html_url"] in seen:
+                continue
+            seen.add(item["html_url"])
+            case.add("github_search", item["login"], item["html_url"], "Public display-name search candidate; API result has no display-name field, so name and ownership need review",
+                     eid, query, {"username": item["login"], "match_type": "search candidate", "searched_spelling":spelling["value"]})
+            count += 1
+    return ("ok", f"{count} public display-name search candidates; {searched} full-name spellings searched") if searched else ("skipped", "display-name queries exceed search budget")
 
 
 def gitlab(case, client, limit):

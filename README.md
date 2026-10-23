@@ -4,7 +4,7 @@
 
 Q4R is a Python command-line tool for Kali Linux and other systems with Python 3.10+. Enter a full name, a username and optionally an email. Q4R retrieves public leads, records response evidence and produces a searchable local report and relationship graph.
 
-Q4R **0.5.0** includes **18 built-in source connectors**, optional browser-based Google/Bing/DuckDuckGo result collection, optional Brave indexed web search and optional Wayback lookup. Twelve connectors perform direct public social/community profile checks. **A Brave key is not required for those checks or the browser option.** A separate registry of **48 domains** generates web-search queries; those are not 48 direct account detectors. Q4R is independent of Maltego and SpiderFoot and makes no claim to search the entire internet or outperform every other tool.
+Q4R **0.6.0** includes **18 built-in source connectors**, optional browser-based Google/Bing/DuckDuckGo result collection, optional Brave indexed web search and optional Wayback lookup. Twelve connectors perform direct public social/community profile checks. **A Brave key is not required for those checks or the browser option.** A separate registry of **48 domains** generates web-search queries; those are not 48 direct account detectors. Q4R is independent of Maltego and SpiderFoot and makes no claim to search the entire internet or outperform every other tool.
 
 ## Install on Kali
 
@@ -93,11 +93,33 @@ q4r scan --name "محمد أحمد حسن العلي" --country "الأردن" -
 
 Country input creates prioritized quoted web queries such as `"example_handle" "Jordan"`, followed by the ordinary queries without a country. It is a **search keyword, not a verified location or a guarantee that an account is in that country**. Direct profile lookups still use exact supplied handles and do not discard profiles without location evidence. Country input alone is insufficient to start a scan; it does not add identity-score points. Optional browser and Brave search budgets still apply, so not every planned query is automatically executed.
 
-The full supplied name stays intact in the web plan, for example `"محمد أحمد حسن العلي" "الأردن"`. Q4R does not generate searches for the father's name, given name or surname individually. Direct social/community sources and GitHub/GitLab/Keybase now check every supplied handle. Name searches run once per source; response evidence and scores remain tied to the original target, with per-handle status saved in source coverage. A failure for one handle does not cancel the others. More handles mean more bounded lookups, not stronger proof that accounts belong to the same person.
+The full supplied name stays intact in the web plan, for example `"محمد أحمد حسن العلي" "الأردن"`. Q4R does not generate searches for the father's name, given name or surname individually. Direct social/community sources and GitHub/GitLab/Keybase now check every supplied handle. Name searches use a bounded set of full-name spellings per source; response evidence and scores remain tied to the original target, with per-handle status saved in source coverage. A failure for one handle does not cancel the others. More handles mean more bounded lookups, not stronger proof that accounts belong to the same person.
 
 The supplied email row is now displayed in the **terminal and HTML report as well as the first line of `accounts.txt`**, including when zero accounts were found. If no email was entered, the terminal/HTML explicitly say so. Platforms that were not checked appear as `? [not checked]` in the text file. `غير مثبت / unverified` still means no explicit public email link was established; this update does not discover private account registrations or use password recovery. For old reports, `q4r results cases/YOUR_CASE --export-accounts` shows and exports the email row if that report saved an email; it cannot recover input that was never saved or rewrite the original HTML.
 
-## Account text file and visible results
+## Multilingual name spellings and longer-name candidates (0.6.0)
+
+Q4R keeps the original full name and generates a small, labeled set of **local spelling suggestions**, without a translation-service request. Common Arabic names have a bounded Arabic/Latin spelling lexicon: for example `Qusai Mohammad` adds `قصي محمد`, and `قصي محمد` adds suggestions such as `Qusai Mohammad` and `Qusay Muhammad`. Unknown Arabic words receive a rough Latin character transliteration; unknown Latin words are not automatically reversed into invented Arabic names. This is not a universal name translator. Suggestions may be wrong, are labeled guesses, never become verified aliases, and do not prove nationality, residence, family relationships or identity.
+
+For recognized Arab-country inputs, the web plan adds Arabic/English country keywords. Brazil inputs add Portuguese country context and `Brasil`/`Brazil` keywords. Latin-script personal names are preserved; accent-folded queries such as `José Silva` / `jose silva` may also be added. Q4R does not turn a person's name into a different Portuguese name or claim to translate all languages. Country language context describes search keywords, not the person's verified language. Other country inputs retain the original keyword. Original-name queries and queries without a country remain in the plan.
+
+Supply a spelling yourself when the automatic guess is unsuitable, or disable automatic suggestions:
+
+```bash
+q4r scan --name "Qusai Mohammad" --country "Saudi Arabia" --name-variant "قصي محمد" --browser --browser-budget 18
+q4r scan --name "قصي محمد" --country "السعودية" --no-name-expansion
+q4r scan --name "José Silva" --country Brazil --browser
+```
+
+`--name-variant` accepts up to three additional full names with at least two parts; it is separate from `--alias` usernames. Automatic expansion is limited to names of 2–8 tokens and at most 200 characters, with at most two automatic suggestions. It does not split out a father's name or invent surnames. The original name remains accepted even when it is too long for automatic expansion; connectors skip over-budget queries rather than shortening them.
+
+**Actual retrieval:** Bluesky actor search, GitHub display-name search and token-enabled Mastodon name search query the bounded full-name spellings. Bluesky/Mastodon search candidates must match all supplied name tokens contiguously in the returned display name, or (for username search) match an explicitly supplied handle. Thus `Qusai Mohammad Else` can be retained for `Qusai Mohammad`, while `Qusai` alone is filtered out. Extra prefixes/suffixes are longer-name candidates, not ownership confirmation. Exact supplied profile lookups remain available even when the display name differs. Filtered API rows remain auditable in raw evidence; their filtered status is recorded, not treated as proof that accounts are absent. Bluesky retains the same profile once per invocation across spelling searches. GitHub search results lack a returned display-name field, so those stay low-evidence search candidates instead of receiving invented name verification.
+
+**Browser coverage:** within the existing page budget, engines now rotate over distinct queries first before revisiting them with another engine. This gives different spellings a chance to run without increasing the default budget. Optional browser setup is still required; no Brave key and no browser mode means the general web search did not run. More generated queries do not mean every one was executed. Use `--browser-budget` or Brave's `--web-budget` explicitly to enlarge coverage.
+
+**Email versus profile existence:** the terminal now first states how many public profile URLs were retrieved and labels the email row as public-email association only. A retrieved public profile and an established email link are separate observations. A name match, longer name, transliteration, account existence or country keyword can never change an unverified email link into a verified one. Scores rank textual evidence, not percentages of identity confidence.
+
+## Account text details
 
 Since 0.3.1, supplying an email adds a single first line to `accounts.txt` with every supported platform. For example (middle platforms omitted here):
 

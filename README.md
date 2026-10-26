@@ -4,7 +4,50 @@
 
 Q4R is a Python command-line tool for Kali Linux and other systems with Python 3.10+. Enter a full name, a username and optionally an email. Q4R retrieves public leads, records response evidence and produces a searchable local report and relationship graph.
 
-Q4R **0.6.0** includes **18 built-in source connectors**, optional browser-based Google/Bing/DuckDuckGo result collection, optional Brave indexed web search and optional Wayback lookup. Twelve connectors perform direct public social/community profile checks. **A Brave key is not required for those checks or the browser option.** A separate registry of **48 domains** generates web-search queries; those are not 48 direct account detectors. Q4R is independent of Maltego and SpiderFoot and makes no claim to search the entire internet or outperform every other tool.
+Q4R **0.7.0** includes **18 built-in source connectors**, optional browser-based Google/Bing/DuckDuckGo result collection, optional Brave indexed web search and optional Wayback lookup. Twelve connectors perform direct public social/community profile checks. **A Brave key is not required for those checks or the browser option.** A separate registry of **48 domains** generates web-search queries; those are not 48 direct account detectors. Q4R is independent of Maltego and SpiderFoot and makes no claim to search the entire internet or outperform every other tool.
+
+## Q4R Studio — Windows and Android
+
+Version **0.7.0** adds a native Windows application and an Android APK alongside the existing `q4r` command. Both use the same public-source research engine and bundled local interface: Arabic by default, an English toggle, a simple search form, saved cases, report viewing and ZIP export.
+
+- **Windows 64-bit:** extract the entire portable ZIP, keep `_internal` next to `Q4R.exe`, then open `Q4R.exe`. Python installation is not needed. Windows 10/11 are the build target; the local packaged smoke was run on Windows 11.
+- **Android 7.0+ (64-bit arm64 or x86_64):** install the signed APK and open Q4R. The APK is distributed directly, not through Google Play. Public connectors and optional Brave indexed search run on the phone. Desktop Playwright collection is unavailable on Android.
+- Choose at least one identifier. A supplied full name requires two or more parts; other fields are optional. Country and additional spellings provide search context, not verified location or automatic identity proof.
+- Findings are sorted by descending **text-evidence match**. Percentages normalize Q4R's existing score out of 90. A value of 100% means all scored text signals matched; it is **not** a measured likelihood of identity. Review source evidence before attribution.
+- An optional JPG/PNG/WebP photo is resized, stripped of metadata and stored locally as a reference attachment. It is never sent to search providers, used for face matching or used to find a person's identity.
+- Email links require an explicitly published matching address. The application does not use password recovery or enumerate hidden account registrations.
+- Cases stay in local application storage until you export them. The optional Brave key is held only during a run and is not added to the report. A blocked/skipped source is not an absent account.
+
+The first desktop release does not install executable updates automatically. Replace the extracted Windows application or install a newer APK to update; retain the same Android signing key when rebuilding an update. Existing CLI update prompts remain available in `q4r`.
+
+### Run Studio from source
+
+```powershell
+python -m pip install ".[desktop]"
+q4r-studio
+```
+
+Optional desktop browser collection also needs Playwright and its browser runtime:
+
+```powershell
+python -m pip install ".[browser]"
+python -m playwright install firefox
+```
+
+For the portable build, use `Q4R.exe --playwright install firefox` before enabling desktop browser collection. Platform blocks/CAPTCHAs remain visible limitations.
+
+### Build the applications
+
+Windows (Python 3.12 recommended):
+
+```powershell
+python -m pip install ".[desktop]" pyinstaller pillow playwright
+python scripts/build_desktop.py --output dist --work build-desktop
+```
+
+The build creates `dist/Q4R-Windows-0.7.0.zip`, dynamic Qt libraries and license notices. It does not include case files or API keys. The portable executable has no commercial code-signing certificate.
+
+Android requires JDK 21, Android SDK 36 and a supported build Python (3.12 recommended). The included Gradle wrapper downloads Gradle 8.13. In `android/`, run `./gradlew assembleDebug` (Windows: `gradlew.bat assembleDebug`). Release signing reads `Q4R_KEYSTORE` and `Q4R_SIGNING_PASSWORD` from the local environment with alias `q4r`; never commit the private keystore or password. A release must be signed with the same key for Android to accept an in-place update. CI builds debug artifacts and executes an Android emulator integration test; debug APKs are not release-signed.
 
 ## Install on Kali
 

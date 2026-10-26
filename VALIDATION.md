@@ -1,5 +1,14 @@
 # Q4R validation
 
+## 0.7.0 application validation
+
+- 137 automated engine/unit regressions pass locally. The new coverage includes metadata-free reference images, case export boundaries, cancellation persistence, actual run status on reopen, score sorting and session-only API-key restoration.
+- Real Chromium UI checks pass in Arabic RTL and English LTR at desktop and phone widths: form validation, local reference image, ranked 100/56/0 synthetic findings, filtering, export and saved-case reopen. Cancelled cases stay stopped with actual attempted progress in both languages. Synthetic fixtures are not search-accuracy measurements.
+- Windows 11: the source Qt shell and packaged portable executable both booted the real interface and native bridge, returned exit code 0 and captured a nonblank interface. Bundled UI assets are compared byte-for-byte with source.
+- Android: the debug APK and instrumentation APK compile with Gradle 8.13, AGP 8.13.2, Chaquopy 17.1, Python 3.12 and SDK 36. Android emulator runtime results are recorded by the Native applications CI workflow. A compile is not a runtime pass; check the workflow result for the delivered commit.
+- Tests do not establish measured recall, precision, ownership, face similarity or broad platform availability. No face matching or password-reset discovery is implemented. Live source access remains dependent on platform changes and network conditions.
+
+
 ## 0.6.0 multilingual full-name candidates
 
 The suite contains 125 unit tests. Fifteen added regressions exercise Arabic/Latin spelling provenance and bounds, unknown-name fallback, Portuguese country/accent context without renaming people, manual spellings and disabling expansion, accepting longer names while rejecting single-token/sub-token/discontiguous matches, separate evidence scores, never inferring email links from names, actual scripted Bluesky/Mastodon requests in both scripts, repeated-profile deduplication, exact-handle preservation, filtered versus absent states, no name truncation, distinct-query browser scheduling, bounded GitHub spelling queries without invented returned name fields, and offline saved metadata/display. Fixtures use synthetic profiles and do not investigate the screenshot's subject. These are implementation tests, not measured identity accuracy or proof that every spelling/site works live. The separate real-Firefox CI smoke still uses intercepted offline engine fixtures.

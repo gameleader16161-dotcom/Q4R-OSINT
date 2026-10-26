@@ -94,9 +94,11 @@ def run(output, chrome=None):
             page.locator('.case-row').first.click()
             page.wait_for_function("()=>document.getElementById('runStatusText').textContent.includes('أُوقف') || document.getElementById('runStatusText').textContent.includes('توقف')")
             assert page.locator('#runProgress').evaluate('n=>n.value')<100
+            page.locator('#toast').wait_for(state='hidden')
             page.screenshot(path=str(output/'cancelled-ar.png'),full_page=True)
             page.locator('#languageButton').click()
             assert 'stopped' in page.locator('#runStatusText').text_content().lower() or 'cancelled' in page.locator('#runStatusText').text_content().lower()
+            assert 'sources with requests' in page.locator('#sourceProgress').text_content()
             page.screenshot(path=str(output/'cancelled-en.png'),full_page=True)
             browser.close()
     print('PASS: real Chromium; Arabic/English, photo attachment, ranked results, phone layout, filtering, export and saved-case reopening.')

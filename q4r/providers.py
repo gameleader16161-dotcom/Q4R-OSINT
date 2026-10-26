@@ -2,7 +2,7 @@ import os
 import re
 from urllib.parse import quote, urlencode, urlsplit
 
-from .core import quoted, safe_url
+from .core import quoted, safe_url, prioritize_plan
 from .http import SourceError
 
 
@@ -122,7 +122,7 @@ def brave(case, client, limit, budget):
     if not token:
         return "skipped", "set BRAVE_SEARCH_API_KEY for automatic web/social search; manual links exported"
     count = 0
-    for entry in case.plan[:budget]:
+    for entry in prioritize_plan(case.plan)[:budget]:
         q = entry["query"]
         if len(q) > 600 or len(q.split()) > 75:
             entry["status"] = "skipped_query_limit"

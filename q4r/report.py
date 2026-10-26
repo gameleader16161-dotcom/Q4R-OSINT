@@ -82,6 +82,12 @@ def write_report(case):
     photo_section = ""
     if any(row.get("file") == "attachments/reference.png" for row in case.attachments):
         photo_section = '<section><h2>Reference attachment</h2><img src="attachments/reference.png" alt="User supplied visual reference" style="max-width:100%;max-height:300px;border-radius:12px"><p>Local attachment only. No face recognition, account matching or image upload was performed.</p></section>'
+    ai_section = ""
+    if case.assistance:
+        draft = case.assistance
+        observations = "".join('<p dir="auto">'+escape(o['text'])+' ['+escape(', '.join(o['evidence_ids']))+']</p>' for o in draft.get('observations', []))
+        limitations = "".join('<p dir="auto">'+escape(x)+'</p>' for x in draft.get('limitations', []))
+        ai_section = ('<section><h2>AI evidence review — draft</h2><p>Generated text is not identity evidence. Citation existence is checked, factual support is not. Review the original sources.</p>' + observations + limitations + '<p>'+escape(draft.get('error', ''))+'</p></section>')
     document = f'''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self'; base-uri 'none'; form-action 'none'">
 <title>Q4R · Investigation report</title><style>{STYLE}</style><main><h1>Q4R</h1><p class="muted">Public-source investigation · {escape(case.started_at)}</p>
@@ -90,6 +96,7 @@ def write_report(case):
 <p>{escape(data["interpretation"])}</p><p>Search links are research tasks, not confirmed accounts or retrieved evidence.</p></section>
 {notice}
 {photo_section}
+{ai_section}
 <section><h2>Source coverage</h2><table><tr><th>Source</th><th>Status</th><th>Detail</th></tr>{coverage}</table></section>
 {check_section}
 <section><h2>Evidence relationships</h2><p>Edges mean “returned for this input”, not “belongs to this person”. First 24 leads displayed; graph.graphml contains all leads.</p>{graph}</section>

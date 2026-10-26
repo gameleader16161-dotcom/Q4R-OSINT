@@ -32,8 +32,20 @@ def build(output, work):
     for name in ('icuuc.dll', 'icuin.dll', 'icudt78.dll'):
         stray = folder/'_internal'/name
         if stray.is_file():stray.unlink()
+    # Freeze the OpenSSL pair belonging to this Python runtime. A foreign
+    # Conda/Poppler pair on PATH can import successfully but fail SSLContext()
+    # initialization with FileNotFoundError before the first scan starts.
+    for name in ('libssl-3-x64.dll', 'libcrypto-3-x64.dll'):
+        native = Path(sys.base_prefix)/'DLLs'/name
+        if not native.is_file():raise RuntimeError('Python TLS runtime missing: '+name)
+        shutil.copy2(native, folder/'_internal'/name)
+    # Some Python distributions extend ssl.SSLContext with a bundled trust
+    # policy file. Preserve the distribution's policy instead of weakening TLS.
+    import ssl
+    trust_policy = Path(ssl.__file__).with_name('codex-rejected-cas.pem')
+    if trust_policy.is_file():shutil.copy2(trust_policy, folder/'_internal'/trust_policy.name)
     shutil.copy2(project/'LICENSE',folder/'LICENSE-Q4R.txt')
-    (folder/'START-HERE.txt').write_text('Q4R 0.7.0\nExtract the entire folder, then open Q4R.exe. Keep _internal next to it.\nCases are stored in your local application-data folder, not next to the executable.\nThe photo is a local reference only. Scores normalize text evidence, not identity probability.\nDesktop browser search requires its Playwright browser runtime; public connectors work without it.\n\nQt/PySide6 libraries are dynamically bundled under LGPLv3; sources and notices:\nhttps://www.qt.io/licensing/open-source-lgpl-obligations\nhttps://code.qt.io/cgit/pyside/pyside-setup.git/\nhttps://code.qt.io/cgit/qt/\n',encoding='utf-8')
+    (folder/'START-HERE.txt').write_text('Q4R 0.8.0\nExtract the entire folder, then open Q4R.exe. Keep _internal next to it.\nCases are stored in your local application-data folder, not next to the executable.\nThe photo is a local reference only. Scores normalize text evidence, not identity probability.\nDesktop browser search requires its Playwright browser runtime; public connectors work without it.\n\nQt/PySide6 libraries are dynamically bundled under LGPLv3; sources and notices:\nhttps://www.qt.io/licensing/open-source-lgpl-obligations\nhttps://code.qt.io/cgit/pyside/pyside-setup.git/\nhttps://code.qt.io/cgit/qt/\n',encoding='utf-8')
     for package in ('PySide6_Essentials','PySide6_Addons','PySide6_WebEngine','shiboken6','playwright'):
         dist=importlib.metadata.distribution(package)
         for item in dist.files or []:
@@ -43,7 +55,7 @@ def build(output, work):
             relative=Path(*[part for part in item.parts if part not in ('..','.')])
             target=folder/'licenses'/package/relative
             target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(source,target)
-    archive=output/'Q4R-Windows-0.7.0.zip'
+    archive=output/'Q4R-Windows-0.8.0.zip'
     with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED,compresslevel=6) as z:
         for path in folder.rglob('*'):
             if path.is_file():z.write(path,path.relative_to(folder.parent))

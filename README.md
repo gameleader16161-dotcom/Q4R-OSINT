@@ -4,11 +4,22 @@
 
 Q4R is a Python command-line tool for Kali Linux and other systems with Python 3.10+. Enter a full name, a username and optionally an email. Q4R retrieves public leads, records response evidence and produces a searchable local report and relationship graph.
 
-Q4R **0.7.0** includes **18 built-in source connectors**, optional browser-based Google/Bing/DuckDuckGo result collection, optional Brave indexed web search and optional Wayback lookup. Twelve connectors perform direct public social/community profile checks. **A Brave key is not required for those checks or the browser option.** A separate registry of **48 domains** generates web-search queries; those are not 48 direct account detectors. Q4R is independent of Maltego and SpiderFoot and makes no claim to search the entire internet or outperform every other tool.
+Q4R **0.8.0** includes **18 built-in source connectors**, optional browser-based Google/Bing/DuckDuckGo result collection, optional Brave indexed web search and optional Wayback lookup. Twelve connectors perform direct public social/community profile checks. **A Brave key is not required for those checks or the browser option.** A separate registry of **48 domains** generates web-search queries; those are not 48 direct account detectors. Q4R is independent of Maltego and SpiderFoot and makes no claim to search the entire internet or outperform every other tool.
+
+## 0.8.0: Windows search repair and clearer research coverage
+
+- Fixed a packaged Windows scan-start failure (`FileNotFoundError` during TLS context creation): builds retain the Python runtime's trust-policy resource and matching OpenSSL libraries. Certificate verification stays enabled. Release checks now start an offline search through the actual EXE, rather than checking only that its window opens. A local public HTTPS smoke against GitHub's `octocat` fixture also retrieved a profile; that is not a platform-wide accuracy benchmark.
+- Fixed the desktop/Android service overwriting the session Brave key with a numeric-option name. Missing keys now remain missing rather than sending an invalid fake token. Regression tests assert that the worker actually succeeds, not just that it restores an environment variable.
+- Bounded web budgets now retain unscoped full identifiers and rotate platform domains before exhausting all country/name variants. Country is a search hint; a profile need not publish that country to appear in an unscoped query.
+- Source rows expose request/result counts, the actual reason and per-handle details. Blocked/skipped sources expand by default. Manual search actions are explicitly manual tasks. A successful check with zero leads is labeled that way.
+- Optional AI settings accept local Ollama or an HTTPS OpenAI-compatible chat-completions endpoint and your provider's model ID. Explicit consent covers up to two bounded calls: up to six query suggestions and a review of up to forty retrieved snippets. Keys are session-only and are never saved with cases. No paid/live AI provider call was made during validation: integration tests intercept synthetic provider responses. Provider/model compatibility and allowance still need to be checked with your own key.
+- AI drafts must cite existing finding IDs; invented citations are rejected. This checks that citations exist, not that the generated text is true. AI cannot alter evidence scores or verify ownership. An AI key does not replace an indexed search provider's key.
+
+**Why a social source can be inconclusive:** Facebook, X and similar platforms may require authenticated access, block requests, or publish no indexed profile for the supplied handle. Q4R does not bypass those controls. GitHub also has a different username grammar from Facebook/Instagram: underscores in a supplied handle are not silently rewritten. Supplying a real published username and enabling indexed search can improve coverage, but no tool can guarantee hidden email registrations or all accounts belonging to a person. Photos remain local reference attachments; there is no face identification.
 
 ## Q4R Studio — Windows and Android
 
-Version **0.7.0** adds a native Windows application and an Android APK alongside the existing `q4r` command. Both use the same public-source research engine and bundled local interface: Arabic by default, an English toggle, a simple search form, saved cases, report viewing and ZIP export.
+Version **0.8.0** adds a native Windows application and an Android APK alongside the existing `q4r` command. Both use the same public-source research engine and bundled local interface: Arabic by default, an English toggle, a simple search form, saved cases, report viewing and ZIP export.
 
 - **Windows 64-bit:** extract the entire portable ZIP, keep `_internal` next to `Q4R.exe`, then open `Q4R.exe`. Python installation is not needed. Windows 10/11 are the build target; the local packaged smoke was run on Windows 11.
 - **Android 7.0+ (64-bit arm64 or x86_64):** install the signed APK and open Q4R. The APK is distributed directly, not through Google Play. Public connectors and optional Brave indexed search run on the phone. Desktop Playwright collection is unavailable on Android.
@@ -45,7 +56,7 @@ python -m pip install ".[desktop]" pyinstaller pillow playwright
 python scripts/build_desktop.py --output dist --work build-desktop
 ```
 
-The build creates `dist/Q4R-Windows-0.7.0.zip`, dynamic Qt libraries and license notices. It does not include case files or API keys. The portable executable has no commercial code-signing certificate.
+The build creates `dist/Q4R-Windows-0.8.0.zip`, dynamic Qt libraries and license notices. It does not include case files or API keys. The portable executable has no commercial code-signing certificate.
 
 Android requires JDK 21, Android SDK 36 and a supported build Python (3.12 recommended). The included Gradle wrapper downloads Gradle 8.13. In `android/`, run `./gradlew assembleDebug` (Windows: `gradlew.bat assembleDebug`). Release signing reads `Q4R_KEYSTORE` and `Q4R_SIGNING_PASSWORD` from the local environment with alias `q4r`; never commit the private keystore or password. A release must be signed with the same key for Android to accept an in-place update. CI builds debug artifacts and executes an Android emulator integration test; debug APKs are not release-signed.
 

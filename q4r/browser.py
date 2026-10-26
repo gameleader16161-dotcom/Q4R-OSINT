@@ -7,7 +7,7 @@ import sys
 import time
 from urllib.parse import parse_qs, urlencode, urljoin, urlsplit
 
-from .core import public_text, safe_url
+from .core import prioritize_plan, public_text, safe_url
 
 
 ENGINES = {
@@ -121,7 +121,7 @@ def search_pages(case, context, engines, budget, limit, timeout, interactive=Fal
     """Browser context is injectable so the driver is tested against offline page fixtures."""
     page, attempts, blocked, statuses = context.new_page(), 0, set(), []
     try:
-        for query_entry, engine in browser_tasks(case.plan, engines):
+        for query_entry, engine in browser_tasks(prioritize_plan(case.plan), engines):
             if attempts >= budget:
                 break
             query = query_entry["query"]

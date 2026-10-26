@@ -161,6 +161,7 @@ class Case:
         self.checks = []
         self.attachments = []
         self.run = {}
+        self.assistance = {}
 
     def for_username(self, username, include_name=True):
         return CaseView(self, replace(self.target, username=username, aliases=[],
@@ -208,6 +209,7 @@ class Case:
                     checks=list(self.checks),
                     attachments=list(self.attachments),
                     run=dict(self.run),
+                    assistance=dict(self.assistance),
                     name_search=dict(forms=self.target.name_forms(), country_context=country_context(self.target.country)),
                     interpretation="Scores rank textual evidence, not probability or proof of identity. "
                     "All relationships are unverified leads. No match does not prove absence.")
@@ -265,3 +267,48 @@ def build_plan(target, sites):
             q = "site:" + site["domain"] + " " + quoted(value)
             yield dict(category=site.get("category", "other"), input=kind, query=q,
                        url="https://www.google.com/search?" + urlencode({"q": q}), status="manual_search_link")
+
+
+def prioritize_plan(plan):
+    """Distribute a bounded web budget across identifiers and platform domains.
+
+    Preserve original entries (and their evidence status) without letting many
+    country/transliteration queries consume the entire first page budget.
+    """
+    from collections import deque
+    preferred = ['facebook.com', 'instagram.com', 'x.com', 'youtube.com', 'tiktok.com',
+                 'linkedin.com', 't.me', 'github.com', 'reddit.com', 'pinterest.com']
+    weights = {'username': 0, 'alias': 1, 'name': 2, 'email': 3, 'name+username': 4}
+    globals_, domains, ai = [], {}, []
+    for entry in plan:
+        if entry.get('input') == 'ai_suggested':
+            ai.append(entry)
+        elif entry.get('category') == 'global':
+            globals_.append(entry)
+        else:
+            match = re.search(r'(?:^|\s)site:([^\s]+)', entry.get('query', ''))
+            if match:domains.setdefault(match.group(1), []).append(entry)
+            else:globals_.append(entry)
+    def rank(row):
+        kind = row.get('input', '')
+        return (0 if kind in weights else 1, weights.get(kind, 20), '+' in kind)
+    globals_.sort(key=rank)
+    seed = [x for x in globals_ if x.get('input') in ('username', 'alias', 'name', 'email')][:4]
+    output, seen = [], set()
+    def add(entry):
+        if entry['query'] not in seen:
+            seen.add(entry['query']);output.append(entry)
+    for entry in seed:add(entry)
+    remainder = deque(x for x in globals_ if x['query'] not in seen)
+    ai = deque(ai)
+    order = sorted(domains, key=lambda d: (preferred.index(d) if d in preferred else len(preferred)))
+    buckets = deque(deque(sorted(domains[d], key=rank)) for d in order)
+    count = 0
+    while buckets:
+        bucket = buckets.popleft();add(bucket.popleft());count += 1
+        if bucket:buckets.append(bucket)
+        if count % 4 == 0:
+            if remainder:add(remainder.popleft())
+            if ai:add(ai.popleft())
+    for entry in [*remainder, *ai]:add(entry)
+    return output

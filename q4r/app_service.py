@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import threading
+import traceback
 from uuid import uuid4
 import zipfile
 
@@ -19,6 +20,8 @@ from .core import Target, safe_url
 from .photos import attach_photo, decode_photo, clean_reference_png
 from .providers import PROVIDERS
 from .results import email_summary_line
+from . import assist
+from .report import write_report
 
 
 def ranked_report(data):
@@ -49,6 +52,16 @@ def ranked_report(data):
         done = len(coverage)
         total = total if isinstance(total, int) else len(coverage)
     data["run_summary"] = dict(status=outcome, completed=done, total=total)
+    for row in data.get("coverage", []):
+        row["retrieved_count"] = sum(f.get("source") == row.get("source") for f in data["findings"])
+        row["request_count"] = sum(r.get("source") == row.get("source") for r in data.get("requests", []))
+    brave = next((r for r in coverage if r.get("source") == "brave"), None)
+    index = "plan_only" if run.get("mode") == "plan_only" else "not_selected" if brave is None else (
+        "not_configured" if brave.get("status") == "skipped" and (run.get("web_configured") is False or "API_KEY" in brave.get("detail", ""))
+        else "blocked" if brave.get("status") in ("blocked", "error") else "ran" if brave.get("status") == "ok" else "unconfirmed")
+    data["search_health"] = dict(index_status=index, requested_sources=total,
+        sources_with_requests=len(attempted), blocked_sources=sum(r.get("status") == "blocked" for r in coverage),
+        skipped_sources=sum(r.get("status") == "skipped" for r in coverage), findings=len(data["findings"]))
     return data
 
 
@@ -126,8 +139,9 @@ class AppService:
             if browser and self.platform == "android":
                 raise ValueError("Desktop browser collection is unavailable on Android")
             image = decode_photo(config.get("photo"))
-            key = config.get("brave_key", "").strip()
-            if len(key) > 512 or any(ord(char) < 32 for char in key):
+            assistance = assist.configure(config.get("ai"))
+            brave_key = config.get("brave_key", "").strip()
+            if len(brave_key) > 512 or any(ord(char) < 32 for char in brave_key):
                 raise ValueError("Invalid Brave key")
             case_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid4().hex[:6]
             argv = ["--no-update-check", "scan", "--name", target.name, "--username", target.username, "--email", target.email,
@@ -147,15 +161,27 @@ class AppService:
                 argv.append("--browser")
             self.cancel.clear()
             self.state = dict(status="running", case_id=case_id, completed=0, total=len(selected)+(1 if browser else 0), report=None, log="")
-            self.worker = threading.Thread(target=self._run, args=(argv, image, key), daemon=True, name="Q4R-search")
+            self.worker = threading.Thread(target=self._run, args=(argv, image, brave_key, assistance), daemon=True, name="Q4R-search")
             self.worker.start()
             return dict(case_id=case_id)
 
-    def _run(self, argv, image, key):
+    def _run(self, argv, image, key, assistance=None):
+        research_case = None
         def observe(event, value):
+            nonlocal research_case
             if event == "case":
+                research_case = value
                 if image:
                     attach_photo(value, image)
+                if assistance and "--offline" not in argv and not self.cancel.is_set():
+                    value.assistance = dict(provider=assistance.provider, model=assistance.model,
+                        status="planning", observations=[], limitations=[])
+                    try:
+                        drafts = assist.draft_queries(assistance, value.target)
+                        value.plan.extend(drafts)
+                        value.assistance.update(status="planned", suggested_queries=len(drafts))
+                    except Exception as exc:
+                        value.assistance.update(status="error", error=str(exc).replace(assistance.key, "[redacted]") if assistance.key else str(exc))
             else:
                 with self.lock:
                     self.state["report"] = ranked_report(value)
@@ -166,6 +192,15 @@ class AppService:
         try:
             with redirect_stdout(LogSink(self)):
                 code = cli_main(argv, observer=observe, cancellation=self.cancel)
+                if assistance and research_case and "--offline" not in argv and not self.cancel.is_set():
+                    try:
+                        reviewed = assist.review(assistance, research_case.data())
+                        research_case.assistance.update(reviewed)
+                    except Exception as exc:
+                        message = str(exc).replace(assistance.key, "[redacted]") if assistance.key else str(exc)
+                        research_case.assistance.update(status="error", error=message)
+                    write_report(research_case)
+                    observe("progress", research_case.data())
             with self.lock:
                 self.state["status"] = self.state["report"]["run_summary"]["status"] if code in (0,3,130) and self.state["report"] else "error"
                 if self.state["report"]:
@@ -173,8 +208,17 @@ class AppService:
                     self.state["completed"], self.state["total"] = summary["completed"], summary["total"]
                 self.state["exit_code"] = code
         except (Exception, SystemExit) as exc:
+            diagnostic = traceback.format_exc()
+            if key:diagnostic = diagnostic.replace(key, "[redacted]")
+            if assistance and assistance.key:diagnostic = diagnostic.replace(assistance.key, "[redacted]")
+            log_path = self.root.parent/"logs"/"last-search-error.txt"
+            try:
+                log_path.parent.mkdir(parents=True, exist_ok=True)
+                log_path.write_text(diagnostic, encoding="utf-8")
+            except OSError:
+                log_path = None
             with self.lock:
-                self.state.update(status="error", error=str(exc))
+                self.state.update(status="error", error=str(exc), diagnostic=str(log_path) if log_path else None)
         finally:
             if key:
                 if previous_key is None:

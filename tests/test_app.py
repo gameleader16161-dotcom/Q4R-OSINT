@@ -111,6 +111,7 @@ class AppTests(unittest.TestCase):
         with patch.dict('os.environ',{'BRAVE_SEARCH_API_KEY':'original-fixture'}),patch.dict('q4r.cli.PROVIDERS',{'github':provider},clear=True):
             case_id=self.service.start(dict(username='demo',sources=['github'],brave_key='session-secret-fixture'))['case_id']
             self.service.worker.join(10)
+            self.assertNotEqual(self.service.state['status'],'error', self.service.state)
             import os
             self.assertEqual(os.environ['BRAVE_SEARCH_API_KEY'],'original-fixture')
         report=(self.root/'cases'/case_id/'report.json').read_text()

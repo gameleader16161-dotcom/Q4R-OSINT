@@ -214,12 +214,13 @@ def main(argv=None, *, observer=None, cancellation=None):
         directory = args.out or Path("cases") / (datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid4().hex[:6])
         case = Case(target, directory)
         case.run = dict(mode="plan_only" if args.offline else "search", outcome="running",
-                        total_sources=len(selected)+(1 if args.browser else 0), processed_sources=0)
+                        total_sources=len(selected)+(1 if args.browser else 0), processed_sources=0,
+                        web_configured=web_ready and "brave" in selected)
+        case.plan = list(build_plan(target, sites))
         if observer:
             observer("case", case)
     except (ValueError, OSError) as exc:
         p.error(str(exc))
-    case.plan = list(build_plan(target, sites))
     client = Client(case, timeout=args.timeout)
     if cancellation is not None:
         client.cancelled = cancellation

@@ -21,6 +21,8 @@ def main(argv=None):
     parser.add_argument("--case-root", type=Path)
     parser.add_argument("--smoke-exit", type=int, help=argparse.SUPPRESS)
     parser.add_argument("--smoke-screenshot", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--smoke-search", choices=("offline", "public"), help=argparse.SUPPRESS)
+    parser.add_argument("--smoke-output", type=Path, help=argparse.SUPPRESS)
     options = parser.parse_args(args)
     try:
         from PySide6.QtCore import QByteArray, QBuffer, QIODevice, QObject, QStandardPaths, Qt, QTimer, QUrl, Signal, Slot
@@ -147,11 +149,21 @@ def main(argv=None):
     view.setUrl(QUrl.fromLocalFile(str(ui)))
     window.setCentralWidget(view)
     window.show()
+    if options.smoke_search:
+        def begin_search():
+            script = """(async()=>{for(let i=0;i<100;i++){if(document.getElementById('connectionNotice')?.hidden)break;await new Promise(r=>setTimeout(r,100));}document.getElementById('fullName').value='';document.getElementById('username').value='octocat';document.querySelectorAll('#sourceChoices input').forEach(n=>n.checked=n.value==='github');document.getElementById('offlineMode').checked=OFFLINE;document.getElementById('username').dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('startButton').click();})()""".replace("OFFLINE", "true" if options.smoke_search == "offline" else "false")
+            page.runJavaScript(script)
+        QTimer.singleShot(500, begin_search)
     if options.smoke_exit:
         def finish_smoke():
             def checked(ready):
                 if options.smoke_screenshot:
                     view.grab().save(str(options.smoke_screenshot))
+                if options.smoke_search:
+                    state = service.handle("status")
+                    if options.smoke_output:
+                        options.smoke_output.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+                    ready = ready and state["report"] is not None and state["status"] in ("planned", "complete", "partial")
                 app.exit(0 if ready else 3)
             page.runJavaScript("document.getElementById('connectionNotice').hidden && document.querySelectorAll('#sourceChoices input').length>0", checked)
         QTimer.singleShot(options.smoke_exit, finish_smoke)

@@ -60,6 +60,23 @@ def run(output, chrome=None):
             page.locator('#email').fill('me@example.org');page.locator('#country').fill('Jordan')
             page.locator('#choosePhoto').click();page.wait_for_function('()=>document.getElementById("photoPreview").naturalWidth>0')
             page.locator('#sourceChoices input').evaluate_all("nodes=>nodes.forEach(n=>n.checked=['github','instagram','bluesky'].includes(n.value))")
+            page.locator('#advancedOptions').evaluate('n=>n.open=true')
+            page.locator('#aiProvider').select_option('compatible')
+            page.locator('#aiEndpoint').fill('https://example.org/ai')
+            page.locator('#aiModel').fill('fixture-model');page.locator('#aiKey').fill('ui-test-secret')
+            page.locator('#startButton').click()
+            assert not page.locator('#error').is_hidden()
+            page.locator('#aiConsent').check()
+            page.screenshot(path=str(output/'assistant-settings.png'),full_page=True)
+            page.locator('#languageButton').click()
+            page.screenshot(path=str(output/'assistant-settings-en.png'),full_page=True)
+            page.set_viewport_size({'width':390,'height':844})
+            assert page.evaluate('document.documentElement.scrollWidth<=window.innerWidth')
+            page.screenshot(path=str(output/'assistant-settings-phone.png'),full_page=True)
+            page.set_viewport_size({'width':1440,'height':1000});page.locator('#languageButton').click()
+            def ai_response(config,system,data):
+                if 'identifiers' in data:return {'queries':['site:facebook.com "example_demo"']}
+                return {'observations':[{'text':'Synthetic evidence review — DEMO; check the source.', 'evidence_ids':[data['evidence'][0]['id']]}], 'limitations':['Synthetic fixture; not measured accuracy.']}
             def source(name):
                 def collect(case,client,limit):
                     attrs={'username':'example_demo','name':'Example Researcher'} if name!='bluesky' else {'username':'other_fixture','name':'Other fixture'}
@@ -69,12 +86,18 @@ def run(output, chrome=None):
                              'https://example.org/'+name+'/demonstration','Synthetic UI demonstration. Not a real profile.',eid,'fixture',attrs,kind='public_profile')
                     return 'ok','Synthetic offline source fixture'
                 return collect
-            with patch.dict('q4r.cli.PROVIDERS',{name:source(name) for name in ('github','instagram','bluesky')}),patch('q4r.http.Client.fetch',side_effect=AssertionError('Live network used')):
+            with patch.dict('q4r.cli.PROVIDERS',{name:source(name) for name in ('github','instagram','bluesky')}),patch('q4r.http.Client.fetch',side_effect=AssertionError('Live network used')),patch('q4r.assist.generate',side_effect=ai_response):
                 page.locator('#startButton').click()
                 page.wait_for_function('()=>document.querySelectorAll(".finding").length===3 && !document.getElementById("exportCase").disabled',timeout=30000)
                 assert page.locator('.score-number').all_text_contents()==['100%','56%','0%']
+                assert page.locator('#aiKey').input_value()==''
+                assert not page.locator('#assistantPanel').is_hidden()
+                assert 'DEMO' in page.locator('#assistantContent').text_content()
                 assert page.locator('#casePhoto').get_attribute('src').startswith('data:image/png')
                 page.screenshot(path=str(output/'desktop-results.png'),full_page=True)
+                page.locator('#assistantPanel').evaluate('n=>n.open=true')
+                page.screenshot(path=str(output/'assistant-review.png'),full_page=True)
+                page.locator('#assistantPanel').evaluate('n=>n.open=false')
                 page.set_viewport_size({'width':390,'height':844})
                 assert page.evaluate('document.documentElement.scrollWidth<=window.innerWidth')
                 page.screenshot(path=str(output/'phone-results.png'),full_page=True)

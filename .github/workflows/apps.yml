@@ -68,7 +68,7 @@ jobs:
       - name: Verify packaged native interface
         shell: pwsh
         run: |
-          $process = Start-Process -FilePath ./dist/portable/Q4R/Q4R.exe -ArgumentList @('--case-root', "$env:RUNNER_TEMP/q4r-smoke", '--smoke-exit', '10000', '--smoke-screenshot', "$env:RUNNER_TEMP/q4r-native.png") -WindowStyle Hidden -Wait -PassThru
+          $process = Start-Process -FilePath ./dist/portable/Q4R/Q4R.exe -ArgumentList @('--case-root', "$env:RUNNER_TEMP/q4r-smoke", '--smoke-search', 'offline', '--smoke-output', "$env:RUNNER_TEMP/q4r-search.json", '--smoke-exit', '15000', '--smoke-screenshot', "$env:RUNNER_TEMP/q4r-native.png") -WindowStyle Hidden -Wait -PassThru
           if ($process.ExitCode -ne 0) { throw "Q4R native smoke exited $($process.ExitCode)" }
           if (!(Test-Path "$env:RUNNER_TEMP/q4r-native.png")) { throw 'Missing native interface capture' }
       - uses: actions/upload-artifact@v4

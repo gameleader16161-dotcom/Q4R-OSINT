@@ -131,7 +131,7 @@ class BrowserResultsTests(unittest.TestCase):
     def test_email_row_is_first_and_explicit_public_field_has_evidence(self):
         data = self.public_email_case()
         write_report(self.case)
-text = (self.case.directory/"accounts.txt").read_text(encoding="utf-8")
+        text = (self.case.directory/"accounts.txt").read_text(encoding="utf-8")
         first = text.splitlines()[0]
         self.assertTrue(first.startswith("Email: me@example.org | Instagram: غير مثبت"))
         self.assertIn("Facebook: غير مثبت", first)

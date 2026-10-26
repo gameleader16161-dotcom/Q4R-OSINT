@@ -148,7 +148,7 @@ def main(argv=None, *, observer=None, cancellation=None):
         except (OSError,ValueError,TypeError,AttributeError) as exc:
             print("Cannot read saved results: " + str(exc),file=sys.stderr)
             return 2
-if args.command == "verify":
+    if args.command == "verify":
         try:
             return verify(args.directory)
         except (OSError, ValueError, TypeError) as exc:

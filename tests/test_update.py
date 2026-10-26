@@ -184,7 +184,7 @@ class UpdateTests(unittest.TestCase):
 
     def test_worker_restarts_only_after_verified_installation(self):
         plan = dict(command=["installer"], python="target-python", version=NEW, restart_args=["--browser"])
-        withpatch("q4r.update_worker.subprocess.run", side_effect=[Mock(), Mock(stdout=NEW+"\n")]), \
+        with patch("q4r.update_worker.subprocess.run", side_effect=[Mock(), Mock(stdout=NEW+"\n")]), \
              patch("q4r.update_worker.os.execv") as restart:
             self.assertEqual(run_plan(plan), 0)
         self.assertEqual(restart.call_args.args[1], ["target-python", "-I", "-m", "q4r", "--no-update-check", "--browser"])

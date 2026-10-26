@@ -59,7 +59,7 @@ def main(argv=None):
                     if not path:
                         self.reply(request_id)
                         return
-                    reader= QImageReader(path)
+                    reader = QImageReader(path)
                     reader.setAutoTransform(True)
                     size = reader.size()
                     if not size.isValid() or size.width()*size.height() > 45_000_000:

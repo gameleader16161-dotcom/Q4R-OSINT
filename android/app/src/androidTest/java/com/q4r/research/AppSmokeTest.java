@@ -34,6 +34,11 @@ public final class AppSmokeTest {
         while(System.currentTimeMillis()<deadline){if("true".equals(js(instrument,web,expression)))return;Thread.sleep(300);}
         fail("Timed out: "+expression+"; body="+js(instrument,web,"document.body.innerText"));
     }
+    private void capture(Instrumentation instrument,Activity activity,String name) throws Exception {
+        Bitmap screenshot=instrument.getUiAutomation().takeScreenshot();
+        File output=new File(activity.getExternalFilesDir(null),name);
+        try(FileOutputStream stream=new FileOutputStream(output)){screenshot.compress(Bitmap.CompressFormat.PNG,100,stream);}
+    }
     @Test public void localEngineLanguageAndRankedInterface() throws Exception {
         Instrumentation instrument=InstrumentationRegistry.getInstrumentation();
         Intent launch=new Intent(instrument.getTargetContext(),MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -44,6 +49,7 @@ public final class AppSmokeTest {
         js(instrument,web,"document.getElementById('languageButton').click()");
         assertEquals("\"ltr\"",js(instrument,web,"document.documentElement.dir"));
         js(instrument,web,"document.getElementById('languageButton').click()");
+        capture(instrument,activity,"form-smoke.png");
         Intents.init();
         intending(hasAction(Intent.ACTION_OPEN_DOCUMENT)).respondWith(new Instrumentation.ActivityResult(Activity.RESULT_CANCELED,null));
         js(instrument,web,"document.getElementById('choosePhoto').click()");Thread.sleep(600);
@@ -78,9 +84,7 @@ public final class AppSmokeTest {
         js(instrument,web,"renderReport({target:{name:'Example Researcher · DEMO'},findings:[{id:'a',source:'github',title:'Fixture low',score:0,match_percent:0},{id:'b',source:'instagram',title:'Fixture high',score:90,match_percent:100},{id:'c',source:'bluesky',title:'Fixture middle',score:50,match_percent:56}],coverage:[]});renderRunState('complete')");
         assertEquals("\"100%,56%,0%\"",js(instrument,web,"[...document.querySelectorAll('.score-number')].map(x=>x.textContent).join(',')"));
         assertEquals("true",js(instrument,web,"document.documentElement.scrollWidth<=window.innerWidth"));
-        Bitmap screenshot=instrument.getUiAutomation().takeScreenshot();
-        File output=new File(activity.getExternalFilesDir(null),"ui-smoke.png");
-        try(FileOutputStream stream=new FileOutputStream(output)){screenshot.compress(Bitmap.CompressFormat.PNG,100,stream);}
+        capture(instrument,activity,"ui-smoke.png");
         Intents.release();
         instrument.runOnMainSync(activity::finish);
     }

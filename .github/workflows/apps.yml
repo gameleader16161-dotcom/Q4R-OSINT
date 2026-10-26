@@ -40,6 +40,7 @@ jobs:
           script: |
             android/gradlew -p android --no-daemon connectedDebugAndroidTest
             adb pull /sdcard/Android/data/com.q4r.research/files/ui-smoke.png android/ui-smoke.png
+            adb pull /sdcard/Android/data/com.q4r.research/files/form-smoke.png android/form-smoke.png
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -48,6 +49,7 @@ jobs:
             android/app/build/reports/androidTests/
             android/app/build/outputs/androidTest-results/
             android/ui-smoke.png
+            android/form-smoke.png
           if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         with:

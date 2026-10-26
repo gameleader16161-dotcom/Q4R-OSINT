@@ -88,7 +88,7 @@ def run(output, chrome=None):
             report_path=next((Path(temp)/'cases').glob('*/report.json'))
             saved=json.loads(report_path.read_text(encoding='utf-8'))
             saved['run']={'outcome':'cancelled','total_sources':19,'processed_sources':1}
-            saved['coverage'].append({'source':'interrupted','status':'cancelled','detail':'UI lifecycle regression fixture'})
+            saved['coverage'].append({'source':'run','status':'interrupted','detail':'UI lifecycle regression fixture'})
             report_path.write_text(json.dumps(saved),encoding='utf-8')
             page.locator('#casesNav').click();page.wait_for_selector('.case-row')
             page.locator('.case-row').first.click()

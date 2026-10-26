@@ -26,6 +26,12 @@ def build(output, work):
              '--distpath',str(output/'portable'),'--workpath',str(work/'build'),'--specpath',str(work),str(project/'desktop_entry.py')]
     subprocess.run(command,cwd=project,check=True)
     folder=output/'portable/Q4R'
+    # Qt 6.12 uses Windows' ICU forwarding library. Some development PATHs
+    # contain an incompatible unversioned Conda ICU which PyInstaller resolves
+    # first. Never ship it over the Windows library (QtCore otherwise fails).
+    for name in ('icuuc.dll', 'icuin.dll', 'icudt78.dll'):
+        stray = folder/'_internal'/name
+        if stray.is_file():stray.unlink()
     shutil.copy2(project/'LICENSE',folder/'LICENSE-Q4R.txt')
     (folder/'START-HERE.txt').write_text('Q4R 0.7.0\nExtract the entire folder, then open Q4R.exe. Keep _internal next to it.\nCases are stored in your local application-data folder, not next to the executable.\nThe photo is a local reference only. Scores normalize text evidence, not identity probability.\nDesktop browser search requires its Playwright browser runtime; public connectors work without it.\n\nQt/PySide6 libraries are dynamically bundled under LGPLv3; sources and notices:\nhttps://www.qt.io/licensing/open-source-lgpl-obligations\nhttps://code.qt.io/cgit/pyside/pyside-setup.git/\nhttps://code.qt.io/cgit/qt/\n',encoding='utf-8')
     for package in ('PySide6_Essentials','PySide6_Addons','PySide6_WebEngine','shiboken6','playwright'):

@@ -79,13 +79,17 @@ def write_report(case):
     if len(data["name_search"]["forms"]) > 1:
         input_summary += "\nFull-name spellings planned (not verified aliases):\n" + "\n".join(
             row["value"] + " [" + row["origin"] + "]" for row in data["name_search"]["forms"])
+    photo_section = ""
+    if any(row.get("file") == "attachments/reference.png" for row in case.attachments):
+        photo_section = '<section><h2>Reference attachment</h2><img src="attachments/reference.png" alt="User supplied visual reference" style="max-width:100%;max-height:300px;border-radius:12px"><p>Local attachment only. No face recognition, account matching or image upload was performed.</p></section>'
     document = f'''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self'; base-uri 'none'; form-action 'none'">
 <title>Q4R · Investigation report</title><style>{STYLE}</style><main><h1>Q4R</h1><p class="muted">Public-source investigation · {escape(case.started_at)}</p>
 <section><h2 dir="auto">{escape(case.target.label())}</h2><pre dir="auto">{escape(input_summary)}</pre>
 <p>{len(case.findings)} retrieved leads · {len(case.requests)} recorded HTTP attempts · {len(case.plan)} planned searches</p>
 <p>{escape(data["interpretation"])}</p><p>Search links are research tasks, not confirmed accounts or retrieved evidence.</p></section>
 {notice}
+{photo_section}
 <section><h2>Source coverage</h2><table><tr><th>Source</th><th>Status</th><th>Detail</th></tr>{coverage}</table></section>
 {check_section}
 <section><h2>Evidence relationships</h2><p>Edges mean “returned for this input”, not “belongs to this person”. First 24 leads displayed; graph.graphml contains all leads.</p>{graph}</section>

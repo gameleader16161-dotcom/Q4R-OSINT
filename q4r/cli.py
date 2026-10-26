@@ -70,7 +70,7 @@ def show_queries(directory, limit):
     return 0
 
 
-def main(argv=None):
+def main(argv=None, *, observer=None, cancellation=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     p = argparse.ArgumentParser(prog="q4r", description="Q4R — public-source research with auditable evidence")
     p.add_argument("--version", action="version", version="Q4R " + __version__)
@@ -148,7 +148,7 @@ def main(argv=None):
         except (OSError,ValueError,TypeError,AttributeError) as exc:
             print("Cannot read saved results: " + str(exc),file=sys.stderr)
             return 2
-    if args.command == "verify":
+if args.command == "verify":
         try:
             return verify(args.directory)
         except (OSError, ValueError, TypeError) as exc:
@@ -213,10 +213,16 @@ def main(argv=None):
         from uuid import uuid4
         directory = args.out or Path("cases") / (datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid4().hex[:6])
         case = Case(target, directory)
+        case.run = dict(mode="plan_only" if args.offline else "search", outcome="running",
+                        total_sources=len(selected)+(1 if args.browser else 0), processed_sources=0)
+        if observer:
+            observer("case", case)
     except (ValueError, OSError) as exc:
         p.error(str(exc))
     case.plan = list(build_plan(target, sites))
     client = Client(case, timeout=args.timeout)
+    if cancellation is not None:
+        client.cancelled = cancellation
     interrupted = False
     def invoke(source, view):
         try:
@@ -235,8 +241,8 @@ def main(argv=None):
         lookups = []
         with case.lock:
             before = sum(f.source == source for f in case.findings)
-        if args.offline:
-            status, detail = "skipped", "offline mode: no requests sent"
+        if args.offline or client.cancelled.is_set():
+            status, detail = "skipped", "offline mode: no requests sent" if args.offline else "User cancelled before lookup"
         else:
             if source in set(SOCIAL_PROVIDERS) | {"github", "gitlab", "keybase"}:
                 for index, username in enumerate(target.usernames() or [""]):
@@ -262,8 +268,11 @@ def main(argv=None):
     def completed(result):
         with case.lock:
             case.coverage.append(result)
+            case.run["processed_sources"] = len([row for row in case.coverage if row.get("source") != "run"])
         print(f'[Q4R] {result["source"]}: {result["status"]}: {result["detail"]}; {result["new_leads"]} new leads', flush=True)
         write_report(case)
+        if observer:
+            observer("progress", case.data())
 
     try:
         print(f"[Q4R] Starting {len(selected)} sources; workers={args.workers}", flush=True)
@@ -299,7 +308,14 @@ def main(argv=None):
         interrupted = True
         case.coverage.append(dict(source="run", status="interrupted", detail="User interrupted; partial results saved"))
     finally:
+        if client.cancelled.is_set() and not any(c.get("status") == "interrupted" for c in case.coverage):
+            interrupted = True
+            case.coverage.append(dict(source="run", status="interrupted", detail="User cancelled; partial results saved"))
+        case.run["outcome"] = "cancelled" if interrupted else "planned" if args.offline else "partial" if any(
+            row.get("status") in ("error", "blocked", "partial", "unconfirmed") for row in case.coverage) else "complete"
         write_report(case)
+        if observer:
+            observer("progress", case.data())
     print(f"\n{len(case.findings)} leads; report: {case.directory.resolve() / 'report.html'}")
     print_findings(case.data(),args.preview_limit)
     print("Report URI: " + (case.directory.resolve() / "report.html").as_uri())

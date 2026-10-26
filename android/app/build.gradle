@@ -1,0 +1,47 @@
+plugins { id 'com.android.application'; id 'com.chaquo.python' }
+
+android {
+    namespace 'com.q4r.research'
+    compileSdk 36
+    buildFeatures { buildConfig true }
+    defaultConfig {
+        applicationId 'com.q4r.research'
+        minSdk 24
+        targetSdk 36
+        versionCode 700
+        versionName '0.7.0'
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+        ndk { abiFilters 'arm64-v8a', 'x86_64' }
+    }
+    signingConfigs {
+        release {
+            if (System.getenv('Q4R_KEYSTORE')) {
+                storeFile file(System.getenv('Q4R_KEYSTORE'))
+                storePassword System.getenv('Q4R_SIGNING_PASSWORD')
+                keyAlias 'q4r'
+                keyPassword System.getenv('Q4R_SIGNING_PASSWORD')
+            }
+        }
+    }
+    buildTypes { release { minifyEnabled false; signingConfig signingConfigs.release } }
+    sourceSets { main { assets.srcDirs = ['build/generated/assets'] } }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}
+chaquopy {
+    defaultConfig {
+        version '3.12'
+        if (System.getenv('Q4R_BUILD_PYTHON')) buildPython System.getenv('Q4R_BUILD_PYTHON')
+        extractPackages 'q4r'
+    }
+    sourceSets { main { srcDirs = ['build/generated/python'] } }
+}
+tasks.register('preparePython', Sync) {
+    from('../../q4r') { include '*.py'; include 'sites.json'; exclude 'desktop.py' }
+    into('build/generated/python/q4r')
+}
+tasks.register('prepareUi', Sync) { from('../../q4r/ui'); into('build/generated/assets/ui') }
+tasks.configureEach { if (name.contains('Python') && name != 'preparePython') dependsOn('preparePython') }
+tasks.configureEach { if (name.startsWith('merge') && name.endsWith('Assets')) dependsOn('prepareUi') }
+dependencies { implementation 'androidx.webkit:webkit:1.14.0'; implementation 'androidx.core:core:1.16.0' }
+dependencies { androidTestImplementation 'androidx.test.ext:junit:1.3.0'; androidTestImplementation 'androidx.test:runner:1.7.0' }
+dependencies { androidTestImplementation 'androidx.test.espresso:espresso-intents:3.7.0' }

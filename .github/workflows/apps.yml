@@ -1,0 +1,73 @@
+name: Native applications
+on:
+  push:
+    branches: [main, desktop-android]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  android-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: android-actions/setup-android@v3
+      - name: Prepare Gradle and emulator access
+        run: |
+          chmod +x android/gradlew
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Compile application and native integration test
+        run: android/gradlew -p android --no-daemon assembleDebug assembleDebugAndroidTest
+      - name: Test embedded engine, native photo, report and export
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            android/gradlew -p android --no-daemon connectedDebugAndroidTest
+            adb pull /sdcard/Android/data/com.q4r.research/files/ui-smoke.png android/ui-smoke.png
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Android-runtime-validation
+          path: |
+            android/app/build/reports/androidTests/
+            android/app/build/outputs/androidTest-results/
+            android/ui-smoke.png
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Q4R-Android-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install ".[desktop]" pyinstaller pillow playwright
+      - run: python scripts/build_desktop.py --output dist --work build-desktop
+      - name: Verify packaged native interface
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath ./dist/portable/Q4R/Q4R.exe -ArgumentList @('--case-root', "$env:RUNNER_TEMP/q4r-smoke", '--smoke-exit', '10000', '--smoke-screenshot', "$env:RUNNER_TEMP/q4r-native.png") -WindowStyle Hidden -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Q4R native smoke exited $($process.ExitCode)" }
+          if (!(Test-Path "$env:RUNNER_TEMP/q4r-native.png")) { throw 'Missing native interface capture' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Q4R-Windows-portable
+          path: dist/Q4R-Windows-*.zip

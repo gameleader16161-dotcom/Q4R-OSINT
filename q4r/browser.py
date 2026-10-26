@@ -213,7 +213,7 @@ def install_browser(browser="firefox", with_deps=False):
     except ImportError:
         print("Install the optional browser extra first: pipx inject q4r-osint playwright",file=sys.stderr)
         return 2
-    command = [sys.executable,"-m","playwright","install"]
+    command = [sys.executable, "--playwright", "install"] if getattr(sys, "frozen", False) else [sys.executable,"-m","playwright","install"]
     if with_deps:
         command.append("--with-deps")
     command.append(browser)

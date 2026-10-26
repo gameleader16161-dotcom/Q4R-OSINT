@@ -159,6 +159,8 @@ class Case:
         self.plan = []
         self.seen = set()
         self.checks = []
+        self.attachments = []
+        self.run = {}
 
     def for_username(self, username, include_name=True):
         return CaseView(self, replace(self.target, username=username, aliases=[],
@@ -204,6 +206,8 @@ class Case:
                     target=asdict(self.target), findings=[asdict(x) for x in self.findings],
                     requests=list(self.requests), coverage=list(self.coverage), plan=list(self.plan),
                     checks=list(self.checks),
+                    attachments=list(self.attachments),
+                    run=dict(self.run),
                     name_search=dict(forms=self.target.name_forms(), country_context=country_context(self.target.country)),
                     interpretation="Scores rank textual evidence, not probability or proof of identity. "
                     "All relationships are unverified leads. No match does not prove absence.")

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' qrc:; script-src 'self' qrc:; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Q4R</title>
+  <link rel="stylesheet" href="app.css">
+  <script src="qrc:///qtwebchannel/qwebchannel.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></symbol>
+    <symbol id="i-photo" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8" r="1.5"/><path d="m3 17 6-6 4 4 3-3 5 5"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Z"/><path d="m8 12 3 3 5-6"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="m10 13 4-4m-6 8-1 1a4 4 0 0 1-6-6l5-5a4 4 0 0 1 6 0m0 10a4 4 0 0 0 6 0l5-5a4 4 0 0 0-6-6l-1 1" transform="translate(2 0) scale(.85 1)"/></symbol>
+    <symbol id="i-export" viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M4 16v4h16v-4"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H5v18h14V8l-5-5Zm0 0v5h5M8 12h8m-8 4h5"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+  </defs></svg>
+  <header class="app-header">
+    <a class="brand" href="#" id="brand" aria-label="Q4R"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M4 12V4h8M20 4h8v8M28 20v8h-8M12 28H4v-8"/><path d="m11 16 4 4 7-9"/></svg><span dir="ltr">Q4R</span><span class="brand-divider"></span><span class="brand-caption" data-t="brand_caption">بحث المصادر العامة</span></a>
+    <nav aria-label="التنقل" id="navigation"><button class="nav-button active" id="newNav" type="button"><svg class="icon"><use href="#i-plus"/></svg><span data-t="new_search">بحث جديد</span></button><button class="nav-button" id="casesNav" type="button"><svg class="icon"><use href="#i-folder"/></svg><span data-t="saved_cases">ملفاتي</span></button></nav>
+    <button class="language-button" id="languageButton" type="button" lang="en">English</button>
+  </header>
+  <main>
+    <div id="connectionNotice" class="notice" role="status" data-t="connecting">جاري تجهيز محرك البحث…</div>
+    <div id="error" class="error" role="alert" hidden></div>
+    <section id="formPage" class="page">
+      <div class="page-heading"><div><h1 data-t="form_title">ابدأ بحثاً جديداً</h1><p data-t="form_intro">اجمع خيوط البحث في مكان واحد، وراجع كل نتيجة مع مصدرها.</p></div><span class="local-state"><span></span><span data-t="local">ملفاتك على جهازك</span></span></div>
+      <form id="researchForm" novalidate>
+        <div class="form-layout">
+          <div class="form-body">
+            <h2 data-t="identifiers">المعلومات المعروفة</h2><p class="section-help" data-t="one_identifier">تكفي معلومة واحدة للبدء. اترك ما لا تعرفه فارغاً.</p>
+            <div class="field-grid">
+              <label class="field full"><span data-t="full_name">الاسم الكامل</span><input id="fullName" name="name" dir="auto" maxlength="2000" autocomplete="off" data-ph="name_placeholder" placeholder="مثال: قصي محمد"><small data-t="name_hint">يبقى الاسم كاملاً؛ لا نبحث عن اسم الأب منفرداً.</small></label>
+              <label class="field"><span data-t="username">اسم المستخدم</span><input id="username" dir="ltr" maxlength="100" autocomplete="off" placeholder="username" spellcheck="false"></label>
+              <label class="field"><span><span data-t="email">البريد الإلكتروني</span><span class="optional" data-t="optional">اختياري</span></span><input id="email" type="email" dir="ltr" maxlength="254" autocomplete="off" placeholder="name@example.com" spellcheck="false"></label>
+              <label class="field"><span><span data-t="country">البلد</span><span class="optional" data-t="optional">اختياري</span></span><input id="country" dir="auto" maxlength="80" autocomplete="off" data-ph="country_placeholder" placeholder="مثال: الأردن أو السعودية"></label>
+              <label class="field"><span><span data-t="aliases">يوزرات أخرى لنفس الشخص</span><span class="optional" data-t="optional">اختياري</span></span><input id="aliases" dir="ltr" maxlength="510" autocomplete="off" placeholder="handle_one, handle_two" spellcheck="false"></label>
+            </div>
+          </div>
+          <aside class="photo-panel">
+            <h2 data-t="reference_photo">الصورة المرجعية</h2><span class="optional" data-t="optional">اختياري</span>
+            <button id="choosePhoto" class="photo-picker" type="button"><span id="photoEmpty"><svg class="photo-icon"><use href="#i-photo"/></svg><strong data-t="add_photo">أرفق صورة</strong><span data-t="photo_formats">PNG، JPG أو WebP</span></span><img id="photoPreview" alt="الصورة المرجعية" hidden></button>
+            <button id="removePhoto" class="text-button" type="button" hidden data-t="remove_photo">إزالة الصورة</button>
+            <p data-t="photo_note">للمراجعة داخل الملف فقط. لا تُرفع الصورة ولا تُستخدم لمطابقة الوجوه.</p>
+          </aside>
+        </div>
+        <div class="sources-section">
+          <div class="section-line"><h2 data-t="sources">مصادر البحث</h2><div class="source-actions"><button class="text-button" id="allSources" type="button" data-t="select_all">تحديد الكل</button><button id="moreSources" class="text-button" type="button"></button></div></div>
+          <div id="sourceChoices" class="source-choices"></div>
+          <p class="section-help" data-t="sources_hint">تختلف إتاحة المنصات. الحظر أو تخطي المصدر لا يعني عدم وجود الحساب.</p>
+        </div>
+        <details class="advanced"><summary><span data-t="advanced">خيارات إضافية</span><svg class="icon"><use href="#i-chevron"/></svg></summary><div class="advanced-body">
+          <label class="field"><span data-t="name_variants">تهجئة أخرى للاسم الكامل</span><input id="nameVariants" dir="auto" maxlength="610" data-ph="variants_placeholder" placeholder="مثال: Qusai Mohammad"><small data-t="variants_hint">افصل بين التهجئات بفاصلة؛ حتى ثلاث تهجئات.</small></label>
+          <div class="advanced-row"><label class="field small-field"><span data-t="result_limit">نتائج لكل مصدر</span><select id="resultLimit"><option value="5">5</option><option value="10">10</option><option value="20">20</option></select></label><label class="field small-field"><span data-t="web_budget">حد استعلامات الويب</span><select id="webBudget"><option value="12">12</option><option value="24">24</option><option value="48">48</option></select></label></div>
+          <label class="field"><span data-t="brave_key">مفتاح Brave Search</span><input id="braveKey" type="password" dir="ltr" maxlength="512" autocomplete="off" placeholder="API key"><small data-t="key_hint">اختياري لبحث الويب العام. يُستخدم لهذه الجلسة ولا يُحفظ في التقارير.</small></label>
+          <label class="checkbox-row" id="browserOption"><input id="browserSearch" type="checkbox"><span data-t="browser_search">جمع نتائج الويب بالمتصفح على الكمبيوتر</span></label>
+          <p class="section-help" id="browserHelp" data-t="browser_hint">يتطلب إضافة Playwright ومحركها المثبتين. لا يتم تجاوز الحظر أو اختبارات التحقق.</p>
+          <label class="checkbox-row"><input id="offlineMode" type="checkbox"><span data-t="offline_mode">إنشاء خطة فقط، بدون إرسال طلبات بحث</span></label>
+        </div></details>
+        <div class="form-footer"><p><svg class="icon"><use href="#i-shield"/></svg><span data-t="privacy_note">المصادر العامة فقط. تحفظ النتائج محلياً.</span></p><button class="primary-button" id="startButton" type="submit" disabled><span data-t="start_search">بدء البحث</span><svg class="icon direction-icon"><use href="#i-arrow"/></svg></button></div>
+      </form>
+    </section>
+    <section id="resultsPage" class="page" hidden>
+      <div class="page-heading"><div><h1 id="caseTitle"></h1><p id="caseSubtitle"></p></div><div class="result-actions"><button class="secondary-button" id="openReport" type="button"><svg class="icon"><use href="#i-file"/></svg><span data-t="open_report">التقرير الكامل</span></button><button class="secondary-button" id="exportCase" type="button"><svg class="icon"><use href="#i-export"/></svg><span data-t="export">تصدير الملف</span></button></div></div>
+      <div class="run-status"><div class="run-status-top"><strong id="runStatusText"></strong><span id="sourceProgress" class="numeric"></span><button id="cancelSearch" class="text-button danger" type="button" data-t="stop">إيقاف البحث</button></div><progress id="runProgress" max="100" value="0"></progress></div>
+      <div class="results-layout"><div class="results-main"><div class="results-toolbar"><h2><span data-t="results">النتائج</span> <span id="resultCount" class="count">0</span></h2><span class="sort-label" data-t="highest_first">الأعلى تطابقاً أولاً</span></div><p class="evidence-help" data-t="score_note">النسبة درجة تطابق الأدلة النصية، وليست احتمالاً أو إثباتاً للهوية.</p><label class="filter-label"><svg class="icon"><use href="#i-search"/></svg><input id="filterResults" type="search" data-ph="filter_placeholder" placeholder="تصفية بالاسم أو المنصة…" autocomplete="off"></label><div id="resultList"></div><div id="emptyResults" class="empty-state"><svg class="empty-icon"><use href="#i-search"/></svg><h3 data-t="waiting_title">النتائج تظهر هنا</h3><p data-t="waiting_text">تصل النتائج تباعاً، وتُرتب تلقائياً حسب درجة تطابق الأدلة.</p></div></div>
+      <aside class="case-aside"><div id="casePhotoBox" hidden><img id="casePhoto" alt="الصورة المرجعية"><p data-t="reference_only">صورة مرجعية مرفقة فقط</p></div><div class="case-details"><h2 data-t="case_info">بيانات الملف</h2><dl id="caseDetails"></dl></div><div class="coverage-section"><h2 data-t="coverage">حالة المصادر</h2><div id="coverageList"></div></div></aside></div>
+      <details class="technical-log"><summary data-t="activity_log">سجل النشاط</summary><pre id="activityLog" dir="ltr"></pre></details>
+    </section>
+    <section id="casesPage" class="page" hidden><div class="page-heading"><div><h1 data-t="saved_cases">ملفاتي</h1><p data-t="cases_intro">ملفات البحث المحفوظة على هذا الجهاز.</p></div><button id="newCaseButton" class="primary-button" type="button"><svg class="icon"><use href="#i-plus"/></svg><span data-t="new_search">بحث جديد</span></button></div><div id="caseList"></div><div id="emptyCases" class="empty-state" hidden><svg class="empty-icon"><use href="#i-folder"/></svg><h2 data-t="no_cases">لا توجد ملفات بعد</h2><p data-t="no_cases_text">ابدأ بحثاً، وستجد ملفه هنا تلقائياً.</p></div></section>
+    <footer class="app-footer"><span dir="ltr" id="appVersion">Q4R</span><span data-t="footer_note">أدلة قابلة للمراجعة، وقرارات تبقى لك.</span></footer>
+  </main>
+  <div id="toast" role="status" hidden></div>
+</body>
+</html>

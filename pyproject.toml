@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "q4r-osint"
-version = "0.6.0"
+version = "0.7.0"
 description = "Evidence-first public-source investigation CLI"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -14,13 +14,15 @@ dependencies = []
 
 [project.optional-dependencies]
 browser = ["playwright>=1.55,<2"]
+desktop = ["PySide6>=6.12,<6.13", "PySide6-WebEngine>=6.12,<6.13"]
 
 [project.scripts]
 q4r = "q4r.cli:main"
+q4r-studio = "q4r.desktop:main"
 
 [tool.setuptools]
 packages = ["q4r"]
 include-package-data = false
 
 [tool.setuptools.package-data]
-q4r = ["sites.json"]
+q4r = ["sites.json", "ui/*.html", "ui/*.css", "ui/*.js", "ui/*.svg"]

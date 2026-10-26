@@ -23,8 +23,8 @@ public final class ReportActivity extends Activity {
             web.getSettings().setAllowFileAccessFromFileURLs(false);
             web.getSettings().setAllowUniversalAccessFromFileURLs(false);
             web.setWebViewClient(new WebViewClient());
-            web.setOnApplyWindowInsetsListener((view,insets)->{view.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});
-            setContentView(web);
+            web.setTag("q4r-report");
+            NativeLayout.install(this, web);
             // A separate view with no native/Python bridge.
             web.loadUrl(android.net.Uri.fromFile(report).toString());
         } catch(Exception problem){finish();}

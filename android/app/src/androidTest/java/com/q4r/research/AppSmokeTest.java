@@ -49,6 +49,10 @@ public final class AppSmokeTest {
         js(instrument,web,"document.getElementById('languageButton').click()");
         assertEquals("\"ltr\"",js(instrument,web,"document.documentElement.dir"));
         js(instrument,web,"document.getElementById('languageButton').click()");
+        instrument.waitForIdleSync();Thread.sleep(400);
+        AtomicReference<Integer> webTop=new AtomicReference<>();
+        instrument.runOnMainSync(()->{int[] position=new int[2];web.getLocationOnScreen(position);webTop.set(position[1]);});
+        assertTrue("Web content is inset below status bar",webTop.get()>0);
         capture(instrument,activity,"form-smoke.png");
         Intents.init();
         intending(hasAction(Intent.ACTION_OPEN_DOCUMENT)).respondWith(new Instrumentation.ActivityResult(Activity.RESULT_CANCELED,null));
@@ -70,7 +74,7 @@ public final class AppSmokeTest {
         js(instrument,web,"document.getElementById('openReport').click()");
         Activity report=instrument.waitForMonitorWithTimeout(reportMonitor,15000);assertNotNull("Report opens natively",report);
         AtomicReference<WebView> reportWeb=new AtomicReference<>();
-        instrument.runOnMainSync(()->reportWeb.set((WebView)((android.view.ViewGroup)report.findViewById(android.R.id.content)).getChildAt(0)));
+        instrument.runOnMainSync(()->reportWeb.set((WebView)report.findViewById(android.R.id.content).findViewWithTag("q4r-report")));
         until(instrument,reportWeb.get(),"document.querySelector('img') && document.querySelector('img').naturalWidth>0");
         instrument.runOnMainSync(report::finish);
         intending(hasAction(Intent.ACTION_CHOOSER)).respondWith(new Instrumentation.ActivityResult(Activity.RESULT_CANCELED,null));
@@ -84,6 +88,8 @@ public final class AppSmokeTest {
         js(instrument,web,"renderReport({target:{name:'Example Researcher · DEMO'},findings:[{id:'a',source:'github',title:'Fixture low',score:0,match_percent:0},{id:'b',source:'instagram',title:'Fixture high',score:90,match_percent:100},{id:'c',source:'bluesky',title:'Fixture middle',score:50,match_percent:56}],coverage:[]});renderRunState('complete')");
         assertEquals("\"100%,56%,0%\"",js(instrument,web,"[...document.querySelectorAll('.score-number')].map(x=>x.textContent).join(',')"));
         assertEquals("true",js(instrument,web,"document.documentElement.scrollWidth<=window.innerWidth"));
+        js(instrument,web,"document.getElementById('toast').hidden=true");
+        instrument.waitForIdleSync();Thread.sleep(700); // Let WebView commit the validated result frame.
         capture(instrument,activity,"ui-smoke.png");
         Intents.release();
         instrument.runOnMainSync(activity::finish);

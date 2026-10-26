@@ -45,7 +45,6 @@ public final class MainActivity extends Activity {
         web.getSettings().setAllowContentAccess(false);
         web.getSettings().setJavaScriptCanOpenWindowsAutomatically(false);
         web.getSettings().setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        web.setOnApplyWindowInsetsListener((view, insets) -> {
             view.setPadding(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(), insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
             return insets;
         });
@@ -57,7 +56,7 @@ public final class MainActivity extends Activity {
             }
         });
         web.addJavascriptInterface(new Host(), "Android");
-        setContentView(web);
+        NativeLayout.install(this, web);
         web.loadUrl("https://appassets.androidplatform.net/assets/ui/index.html");
     }
 

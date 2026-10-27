@@ -59,7 +59,14 @@ def ranked_report(data):
     index = "plan_only" if run.get("mode") == "plan_only" else "not_selected" if brave is None else (
         "not_configured" if brave.get("status") == "skipped" and (run.get("web_configured") is False or "API_KEY" in brave.get("detail", ""))
         else "blocked" if brave.get("status") in ("blocked", "error") else "ran" if brave.get("status") == "ok" else "unconfirmed")
-    data["search_health"] = dict(index_status=index, requested_sources=total,
+    browser = next((r for r in coverage if r.get("source") == "browser"), None)
+    browser_status = browser.get("status") if browser else "not_selected"
+    if run.get("mode") != "plan_only":
+        if browser_status in ("ok", "partial", "not_found"):
+            index = "ran"
+        elif index != "ran" and browser:
+            index = "browser_unavailable" if browser_status == "skipped" else "blocked"
+    data["search_health"] = dict(index_status=index, browser_status=browser_status, requested_sources=total,
         sources_with_requests=len(attempted), blocked_sources=sum(r.get("status") == "blocked" for r in coverage),
         skipped_sources=sum(r.get("status") == "skipped" for r in coverage), findings=len(data["findings"]))
     return data

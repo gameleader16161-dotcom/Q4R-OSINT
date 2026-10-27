@@ -123,6 +123,18 @@ def run(output, chrome=None):
             assert 'stopped' in page.locator('#runStatusText').text_content().lower() or 'cancelled' in page.locator('#runStatusText').text_content().lower()
             assert 'sources with requests' in page.locator('#sourceProgress').text_content()
             page.screenshot(path=str(output/'cancelled-en.png'),full_page=True)
+            # A successful browser-only run must not request a Brave key afterward.
+            saved['run']={'outcome':'complete','mode':'search','total_sources':1,'web_configured':False}
+            saved['coverage']=[{'source':'browser','status':'ok','detail':'Synthetic browser-only coverage fixture'}]
+            saved['requests']=[{'source':'browser_google','status':200}]
+            report_path.write_text(json.dumps(saved),encoding='utf-8')
+            page.locator('#casesNav').click();page.wait_for_selector('.case-row');page.locator('.case-row').first.click()
+            page.wait_for_function("()=>document.getElementById('searchHealth').textContent.includes('Indexed web search ran')")
+            assert 'not configured' not in page.locator('#searchHealth').text_content()
+            page.screenshot(path=str(output/'browser-coverage-en.png'),full_page=True)
+            page.locator('#languageButton').click()
+            assert 'تم تشغيل البحث' in page.locator('#searchHealth').text_content()
+            page.screenshot(path=str(output/'browser-coverage-ar.png'),full_page=True)
             browser.close()
     print('PASS: real Chromium; Arabic/English, photo attachment, ranked results, phone layout, filtering, export and saved-case reopening.')
 

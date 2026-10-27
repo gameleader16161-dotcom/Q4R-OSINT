@@ -2,7 +2,7 @@
 
 ## 0.8.0 checks
 
-145 unit/engine regressions pass locally, including exact session-key delivery and restoration, real service AI planning/review using intercepted synthetic responses, complete-identifier preservation, invented citation rejection, consent/endpoint validation, unchanged finding scores and balanced platform query budgets. Real Chromium checks cover the AI settings/consent and draft display, source details, Arabic/English, mobile layout, saved-case reopening and cancellation.
+147 unit/engine regressions pass locally, including exact session-key delivery and restoration, real service AI planning/review using intercepted synthetic responses, complete-identifier preservation, invented citation rejection, consent/endpoint validation, unchanged finding scores and balanced platform query budgets. Real Chromium checks cover the AI settings/consent and draft display, source details, Arabic/English, mobile layout, saved-case reopening and cancellation.
 
 The previous EXE's scan-start error was reproduced through its native bridge even with offline mode. A diagnostic build traced it to a missing runtime trust-policy PEM used by its distribution's SSLContext. Preserving that policy fixes offline startup without weakening HTTPS. The corrected packaged application also made a real HTTPS GitHub `octocat` lookup and retrieved one profile. This isolated public fixture is not evidence of recall or accuracy for people or other platforms. New Windows CI exercises an actual packaged offline search. Android and final binary job results are recorded in the Native applications workflow for the delivered commit.
 

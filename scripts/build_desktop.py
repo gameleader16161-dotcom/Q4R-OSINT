@@ -35,10 +35,13 @@ def build(output, work):
     # Freeze the OpenSSL pair belonging to this Python runtime. A foreign
     # Conda/Poppler pair on PATH can import successfully but fail SSLContext()
     # initialization with FileNotFoundError before the first scan starts.
-    for name in ('libssl-3-x64.dll', 'libcrypto-3-x64.dll'):
-        native = Path(sys.base_prefix)/'DLLs'/name
-        if not native.is_file():raise RuntimeError('Python TLS runtime missing: '+name)
-        shutil.copy2(native, folder/'_internal'/name)
+    import _ssl
+    tls_folder = Path(_ssl.__file__).parent
+    tls_files = [*tls_folder.glob('libssl*.dll'), *tls_folder.glob('libcrypto*.dll')]
+    if not any(p.name.startswith('libssl') for p in tls_files) or not any(p.name.startswith('libcrypto') for p in tls_files):
+        raise RuntimeError('Python TLS runtime libraries were not found beside _ssl')
+    for native in tls_files:
+        shutil.copy2(native, folder/'_internal'/native.name)
     # Some Python distributions extend ssl.SSLContext with a bundled trust
     # policy file. Preserve the distribution's policy instead of weakening TLS.
     import ssl

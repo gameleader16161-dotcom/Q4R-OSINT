@@ -38,6 +38,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           script: |
+            adb shell am force-stop com.google.android.apps.nexuslauncher
             android/gradlew -p android --no-daemon connectedDebugAndroidTest
             adb pull /sdcard/Android/data/com.q4r.research/files/ui-smoke.png android/ui-smoke.png
             adb pull /sdcard/Android/data/com.q4r.research/files/form-smoke.png android/form-smoke.png

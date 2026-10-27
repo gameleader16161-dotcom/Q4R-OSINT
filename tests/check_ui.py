@@ -127,10 +127,15 @@ def run(output, chrome=None):
             saved['run']={'outcome':'complete','mode':'search','total_sources':1,'web_configured':False}
             saved['coverage']=[{'source':'browser','status':'ok','detail':'Synthetic browser-only coverage fixture'}]
             saved['requests']=[{'source':'browser_google','status':200}]
+            for finding in saved['findings']:finding['source']='browser_google'
             report_path.write_text(json.dumps(saved),encoding='utf-8')
             page.locator('#casesNav').click();page.wait_for_selector('.case-row');page.locator('.case-row').first.click()
             page.wait_for_function("()=>document.getElementById('searchHealth').textContent.includes('Indexed web search ran')")
             assert 'not configured' not in page.locator('#searchHealth').text_content()
+            assert 'Checked; no results' not in page.locator('#coverageList').text_content()
+            page.locator('#coverageList details').evaluate('n=>n.open=true')
+            assert '1 requests' in page.locator('#coverageList').text_content()
+            assert '3 results' in page.locator('#coverageList').text_content()
             page.screenshot(path=str(output/'browser-coverage-en.png'),full_page=True)
             page.locator('#languageButton').click()
             assert 'تم تشغيل البحث' in page.locator('#searchHealth').text_content()

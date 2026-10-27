@@ -52,9 +52,11 @@ def ranked_report(data):
         done = len(coverage)
         total = total if isinstance(total, int) else len(coverage)
     data["run_summary"] = dict(status=outcome, completed=done, total=total)
+    def same_source(actual, requested):
+        return actual == requested or requested == "browser" and str(actual).startswith("browser_")
     for row in data.get("coverage", []):
-        row["retrieved_count"] = sum(f.get("source") == row.get("source") for f in data["findings"])
-        row["request_count"] = sum(r.get("source") == row.get("source") for r in data.get("requests", []))
+        row["retrieved_count"] = sum(same_source(f.get("source"), row.get("source")) for f in data["findings"])
+        row["request_count"] = sum(same_source(r.get("source"), row.get("source")) for r in data.get("requests", []))
     brave = next((r for r in coverage if r.get("source") == "brave"), None)
     index = "plan_only" if run.get("mode") == "plan_only" else "not_selected" if brave is None else (
         "not_configured" if brave.get("status") == "skipped" and (run.get("web_configured") is False or "API_KEY" in brave.get("detail", ""))

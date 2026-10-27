@@ -73,13 +73,15 @@ class AssistanceTests(unittest.TestCase):
         self.assertEqual(report['coverage'][0]['retrieved_count'],0)
 
     def test_browser_only_success_is_recognized_without_a_brave_key(self):
-        data=ranked_report(dict(findings=[],run=dict(mode='search',web_configured=False),
+        data=ranked_report(dict(findings=[dict(source='browser_google',score=25)],run=dict(mode='search',web_configured=False),
             coverage=[dict(source='brave',status='skipped',detail='set BRAVE_SEARCH_API_KEY'),
                       dict(source='browser',status='ok',detail='Fixture rendered searches completed')],
             requests=[dict(source='browser_google',status=200)]))
         self.assertEqual(data['search_health']['index_status'],'ran')
         self.assertEqual(data['search_health']['browser_status'],'ok')
         self.assertEqual(data['search_health']['sources_with_requests'],1)
+        browser=next(r for r in data['coverage'] if r['source']=='browser')
+        self.assertEqual((browser['request_count'],browser['retrieved_count']),(1,1))
 
     def test_unavailable_browser_does_not_masquerade_as_missing_brave_key(self):
         data=ranked_report(dict(findings=[],run=dict(mode='search'),
